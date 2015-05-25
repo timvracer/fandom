@@ -20,16 +20,39 @@
 
 var fs = require('fs');
 var path = require('path');
-var express = require('express');
 var bodyParser = require('body-parser');
-var app = express();
-var http = require('http').Server(app);
-var io = require('socket.io')(http);
+
+var express = require('express');
+
+app = express()
+server = require('http').createServer(app)
+io = require("socket.io").listen(server);
+
 
 // helper function - to copy the coffee script existenstial operator
 function exists(a) {return (a!==undefined && a!==null)}
 
+//======EXPRESS ROUTING ===========================
 
+app.set('port', process.env.OPENSHIFT_NODEJS_PORT || 3000);
+app.set('ipaddr', process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1");
+app.use('/', express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({extended: true}));
+
+// process API calls
+app.get('/api/socket-port', function(req,res) {
+    res.writeHead(200, {"Content-Type": "application/json"});
+    res.write(JSON.stringify({port: app.get('port')}));
+    res.end();
+});
+
+server.listen(app.get('port'), app.get('ipaddr'), function(){
+    console.log('Express server listening on  IP: ' + app.get('ipaddr') + ' and port ' + app.get('port'));
+});
+
+
+//---------------------------------------------------------------
 // Set up socket listeners------------------------
 //
 io.on('connection', function(socket){
@@ -73,36 +96,6 @@ io.on('connection', function(socket){
     });
 });
 
-//======EXPRESS ROUTING ===========================
-
-var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8000;
-var server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1';
- 
-var socket_port = parseInt(server_port) + 363; // Openshift uses 8080 and 8443 
-
-// Socket Listener
-http.listen(parseInt(socket_port), server_ip_address, function(){
-    console.log('listening on ' + server_ip_address + ':' + socket_port);
-});
-
-
-// HTTP Listener / Server
-app.set('port', server_port);
-
-// process API calls
-app.get('/api/socket-port', function(req,res) {
-    res.writeHead(200, {"Content-Type": "application/json"});
-    res.write(JSON.stringify({port: socket_port}));
-    res.end();
-});
-
-app.use('/', express.static(path.join(__dirname, 'public')));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true}));
-
-app.listen(app.get('port'), server_ip_address, function() {
-    console.log('Server started: http://' + server_ip_address + ':' + app.get('port') + '/');
-});
 
 
 //---------------------------------------------------------------------------------

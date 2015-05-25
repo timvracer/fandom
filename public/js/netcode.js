@@ -26,10 +26,13 @@ function networkSetup() {
 
 			    socket = io(":" + obj.port);
 			    console.log (socket);
+
 			    socket.on("connect_error", function(msg) {
+			    	console.log ("CONNECT_ERROR");
 					role = 'local';
 					startGame(role, netUserID);
 			    });
+
 			    socket.on("connect", function(msg) {
 			    	console.log("connect received");
 			    	// do not use netUserSend sincd we are still local
@@ -61,7 +64,7 @@ function updateServerCoords(stars, ply, role) {
 	if (role=='local') {
 		return;
 	}
-	
+
 	var coords = {stars: []};
 	var d = new Date().getTime();
 

@@ -18,6 +18,8 @@ function startGame(r, id) {
     playerID = id;
 
     if (game == null) {
+        $("#loading").hide();
+        
         game = new Phaser.Game(800, 600, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
     } else {
         // if this is a restart, then possibly reset REMOTE characters
