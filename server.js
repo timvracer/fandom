@@ -78,7 +78,7 @@ io.on('connection', function(socket){
 var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8000;
 var server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1';
  
-var socket_port = parseInt(server_port) + 443;
+var socket_port = parseInt(server_port) + 363; // Openshift uses 8080 and 8443 
 
 // Socket Listener
 http.listen(parseInt(socket_port), server_ip_address, function(){

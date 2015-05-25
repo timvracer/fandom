@@ -58,6 +58,10 @@ var USC_lastUpdate = new Date().getTime();
 
 function updateServerCoords(stars, ply, role) {
 
+	if (role=='local') {
+		return;
+	}
+	
 	var coords = {stars: []};
 	var d = new Date().getTime();
 
