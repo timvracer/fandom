@@ -13,24 +13,34 @@ function networkSetup() {
 
 	// retrieve information about the socket the server is using to communicate information back
 	// to the client.  Port is configurable at the server, so we request it here
+	console.log ("attempting to get socket port")
 	$.ajax({
 
 		url: "/api/socket-port",
 		dataType: "json",
 		type: "GET",
 		success: function(obj) {
-			console.log(obj);
+
+			console.log("Socket Port received: " + obj.port);
 			if (exists(obj.port)) {
 
 			    socket = io(":" + obj.port);
-
+			    console.log (socket);
+			    socket.on("connect_error", function(msg) {
+					role = 'local';
+					startGame(role, netUserID);
+			    });
 			    socket.on("connect", function(msg) {
 			    	console.log("connect received");
-				    netSocketSend("username", netUserID);
+			    	// do not use netUserSend sincd we are still local
+					socket.emit("username", {userID: netUserID, msg: netUserID});
+
+				    // could be a problem if connect happens after an error TODO
 				    socket.on("startGame", function(msg){
 				    	netStartGame(msg);
 				    });
-				});
+				});    
+
 			} else {
 				logger ("No socket provided, dynamic updates disabled");
 			}			
@@ -149,6 +159,8 @@ function netRecordKill(id) {
 // Once connection and user ID are establihed, how to send user-based messages
 // 
 function netSocketSend (op, msg) {
-	socket.emit(op, {userID: netUserID, msg: msg});
+	if (role != 'local') {
+		socket.emit(op, {userID: netUserID, msg: msg});
+	}	
 }
 

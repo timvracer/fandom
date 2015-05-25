@@ -16,8 +16,15 @@ function init() {
 function startGame(r, id) {
     role = r;
     playerID = id;
+
     if (game == null) {
         game = new Phaser.Game(800, 600, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
+    } else {
+        // if this is a restart, then possibly reset REMOTE characters
+        if (remotePlayers != null) {
+            remotePlayers.removeAll(true);
+        }
+
     }
     debugText = r;
 }
@@ -68,7 +75,7 @@ function create() {
     initControls();
 
     // kick things off
-    if (role=="master") {
+    if (role=="master" || role=="local") {
         generateStars(stars, 5);
     }    
 
@@ -385,7 +392,7 @@ function collectStar (player, star) {
 }
 
 function maybeRegenerate() {
-    if (stars.total == 0 && role == "master") {
+    if (stars.total == 0 && (role == "local" || role == "master")) {
 
         stars.removeAll(true);
         generateStars(stars, 5+level*3);
