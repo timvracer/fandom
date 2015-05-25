@@ -11,21 +11,34 @@ var netUserID = new Date().getTime();
 
 function networkSetup() {
 
-    socket = io(":"+SOCKET_PORT);
+	// retrieve information about the socket the server is using to communicate information back
+	// to the client.  Port is configurable at the server, so we request it here
+	$.ajax({
 
-    socket.on("connect", function(msg) {
-    	console.log("connect received");
-	    netSocketSend("username", netUserID);
-	    socket.on("startGame", function(msg){
-	    	netStartGame(msg);
-	    });
+		url: "/api/socket-port",
+		dataType: "json",
+		type: "GET",
+		success: function(obj) {
+			console.log(obj);
+			if (exists(obj.port)) {
+
+			    socket = io(":" + obj.port);
+
+			    socket.on("connect", function(msg) {
+			    	console.log("connect received");
+				    netSocketSend("username", netUserID);
+				    socket.on("startGame", function(msg){
+				    	netStartGame(msg);
+				    });
+				});
+			} else {
+				logger ("No socket provided, dynamic updates disabled");
+			}			
+			return;
+		}	
 	});
-
-    //socket.on("reconnect", function(msg) {
-    //	console.log("reconnect received");
-	//    netSocketSend("username-reconnect", netUserID);
-	//});
 }
+
 
 function updateServerScore(score) {
     netSocketSend("score", score);

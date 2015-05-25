@@ -82,6 +82,14 @@ http.listen(parseInt(socket_port), function(){
 
 // HTTP Listener / Server
 app.set('port', server_port);
+
+// process API calls
+app.get('/api/socket-port', function(req,res) {
+    res.writeHead(200, {"Content-Type": "application/json"});
+    res.write(JSON.stringify({port: socket_port}));
+    res.end();
+});
+
 app.use('/', express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));

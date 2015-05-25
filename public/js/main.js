@@ -5,6 +5,10 @@ var role = "n/a";
 
 init()
 
+
+// helper function - to copy the coffee script existenstial operator
+function exists(a) {return (a!==undefined && a!==null)}
+
 function init() {
     networkSetup();
 }
