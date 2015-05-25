@@ -81,8 +81,8 @@ var server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1';
 var socket_port = parseInt(server_port) + 1;
 
 // Socket Listener
-http.listen(parseInt(socket_port), function(){
-    console.log('listening on ' + socket_port);
+http.listen(parseInt(socket_port), server_ip_address, function(){
+    console.log('listening on ' + server_ip_address + ':' + socket_port);
 });
 
 
@@ -100,8 +100,8 @@ app.use('/', express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
-app.listen(app.get('port'), function() {
-    console.log('Server started: http://localhost:' + app.get('port') + '/');
+app.listen(app.get('port'), server_ip_address, function() {
+    console.log('Server started: http://' + server_ip_address + ':' + app.get('port') + '/');
 });
 
 
