@@ -69,15 +69,19 @@ io.on('connection', function(socket){
     });
 });
 
+var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
+var server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1';
+ 
+var socket_port = parseInt(server_port) + 1;
 
 // Socket Listener
-http.listen(3001, function(){
-    console.log('listening on *:3001');
+http.listen(parseInt(socket_port), function(){
+    console.log('listening on ' + socket_port);
 });
 
 
 // HTTP Listener / Server
-app.set('port', (process.env.PORT || 3000));
+app.set('port', server_port);
 app.use('/', express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));

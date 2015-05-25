@@ -3,13 +3,15 @@
 // the given userID is associated with the socketID.  
 //
 
+var SOCKET_PORT = 8081;
 var UPDATE_FREQUENCY = 100; // in ms
 var socket;
 var netUserID = new Date().getTime();
 
+
 function networkSetup() {
 
-    socket = io(":3001");
+    socket = io(":"+SOCKET_PORT);
 
     socket.on("connect", function(msg) {
     	console.log("connect received");
