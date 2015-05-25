@@ -89,32 +89,55 @@ function reportPlayerPos (ply) {
 
 }
 
+//================SET UP GAME AND ENDPOINTS =================
+//
 function netStartGame(msg) {
 
 	console.log ("Game start as " + msg.role);
 	startGame(msg.role, netUserID);
 
-	// Initialize Messages that only the SLAVE processes
-	if (msg.role == "slave") {
-		console.log ("enabling coordsSync message");
+	console.log ("enabling coordsSync message");
 
-		socket.on("coordsSync", function(coords){
+	// message to get new NPC coordinates
+	socket.on("coordsSync", function(coords){
+		if (role=='slave') {
 			syncSlaveCoords(coords.stars);
-		});
-
-	}
+		}	
+	});
 
 	// Initialize Messages that both process
+	// NPC was destroyed, should be removed from the board
+	//
     socket.on("starkilled", function(msg){
     	console.log ("received starkilled msg " + msg);
     	recordStarKill(msg);
     });
 
+    // Update other players on the board
+    //
     socket.on("pcoordsSync", function(msg){
     	showPlayers(msg.players);
 	});
 
+    // Need new master
+    //
+    socket.on("needNewMaster", function(msg) {
+    	netSocketSend ("pick_me", netUserID);
+	});
+
+    // Listen for a promotion to master
+    //
+    socket.on("roleChange", function(msg){
+    	changeRole(msg);
+	});
 }
+
+function changeRole(msg) {
+	//netSocketSend ("statusChangeAck", netUserID);
+	debugText = role;
+	role = msg;
+}
+
 
 // Report to server you killed a star
 function netRecordKill(id) {

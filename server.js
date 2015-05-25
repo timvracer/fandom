@@ -30,7 +30,7 @@ var io = require('socket.io')(http);
 function exists(a) {return (a!==undefined && a!==null)}
 
 
-// Set up socket listener
+// Set up socket listeners------------------------
 //
 io.on('connection', function(socket){
   // send the user their reg info
@@ -63,11 +63,17 @@ io.on('connection', function(socket){
         var msg = unpackMsg(pmsg);
         broadcastKill(msg);
     });
+    // try to grab master if not set
+    socket.on('pick_me', function(pmsg) {
+        maybeNewMaster(pmsg);
+    });
 
     socket.on('disconnect', function(msg){
         disconnectUser(socket, msg);
     });
 });
+
+//======EXPRESS ROUTING ===========================
 
 var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
 var server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1';
@@ -121,8 +127,6 @@ function getConnectRecord(socket) {
 
 function clientUserRole(socket) {
     return connects[clientUserID(socket)].role;
-
-  //return (connects[cliientUserIDmasterSocket==clientUserID(socket) ? "master" : "slave");
 }
 function removeConnectRecord(sid) {
     delete connects[sid];
@@ -130,12 +134,18 @@ function removeConnectRecord(sid) {
 function removePcoordsCacheRecord(sid) {
     delete pcoordsCache.players[sid];
 }
-
+function findUserConnectionRecord (id) {
+    for (var key in connects) {
+        if (connects[key].userID == id) {
+            return connects[key];
+        }
+    }
+}
 
 function registerSocketUser(socket) {
     console.log ("client IP: " + socket.client.conn.remoteAddress);
     console.log ("connection ID: " + clientUserID(socket));
-    connects[clientUserID(socket)] = {socketID: clientUserID(socket), userID: null, role: "none"};
+    connects[clientUserID(socket)] = {socket: socket, socketID: clientUserID(socket), userID: null, role: "none"};
     console.log (connects);
 }
 
@@ -218,29 +228,52 @@ function recordPCoords(socket, coords) {
 
 function disconnectUser(socket, msg) {
 
-    console.log(connects);
-    console.log(pcoordsCache);
     var rec = getConnectRecord(socket);
 
     if (exists(rec)) {
 
-        if (rec.role == 'master') {
-            currentMaster = null;
-            //
-            // Try to find a new master and promote them
-            //
-        }
         console.log(rec.role + ' user disconnected - id: ' + rec.socketID + ' - ' + rec.userID);
         removePcoordsCacheRecord(rec.socketID);
         removeConnectRecord(rec.socketID);
-    }    
 
+        if (missingMaster()) {
+            currentMaster = null;
+            findNewMaster();
+        }
+    }    
     console.log ("disconnect");  
     console.log(connects);
     console.log(pcoordsCache);
 }
 
+function findNewMaster() {
+    console.log ("need new master");
+    io.sockets.emit("needNewMaster", " ");
+}
+function maybeNewMaster(msg) {
+    var id = msg.userID;
+    console.log ("maybe new master " + id);
 
+    rec = findUserConnectionRecord(id);
+    if (currentMaster == null) {
+        // critical section here, will need a true atomic semaphore
+        //
+        currentMaster = rec.socketID;
+        rec.role = 'master';
+        rec.socket.emit ("roleChange", "master");
+    }
+}
+
+function missingMaster() {
+
+    for (var key in connects) {
+        if (connects[key].role == 'master') {
+            return false;
+        }
+    }
+    console.log ("missing master!");
+    return true;
+}
 
 
 

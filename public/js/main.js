@@ -283,12 +283,8 @@ function checkOverlapBounds(player, star) {
 
 function syncSlaveCoords(coords) {
 
-    //if (stars.total < coords.length) {
-        stars.removeAll(true);
-        generateStars (stars, coords.length, coords);
-    //} else {
-
-    //}    
+    stars.removeAll(true);
+    generateStars (stars, coords.length, coords);
 }
 
 
@@ -313,8 +309,8 @@ function generateStars(sgrp, amt, coords) {
             star.y = coords[i].y;
             star.body.velocity.x = coords[i].xv;
             star.body.velocity.y = coords[i].yv;
-            star.body.xb = coords[i].xb;
-            star.body.yb = coords[i].yb;
+            star.body.bounce.x = coords[i].xb;
+            star.body.bounce.y = coords[i].yb;
             star.body.angularVelocity = coords[i].av;
             star.syncID = coords[i].id;
 
@@ -390,6 +386,8 @@ function collectStar (player, star) {
 
 function maybeRegenerate() {
     if (stars.total == 0 && role == "master") {
+
+        stars.removeAll(true);
         generateStars(stars, 5+level*3);
         level++;
     }    
