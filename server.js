@@ -42,8 +42,13 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 // process API calls
 app.get('/api/socket-port', function(req,res) {
+
+    var clientPort = app.get('port');
+    if (process.env.OPENSHIFT_NODEJS_PORT != null) {
+        clientPort -= 80;
+    }
     res.writeHead(200, {"Content-Type": "application/json"});
-    res.write(JSON.stringify({port: app.get('port')}));
+    res.write(JSON.stringify({port: clientPort}));
     res.end();
 });
 
