@@ -1,26 +1,30 @@
-
-
-var game = null;
-var role = "n/a";
-
-init()
-
-
 // helper function - to copy the coffee script existenstial operator
 function exists(a) {return (a!==undefined && a!==null)}
 
-function init() {
-    networkSetup();
-}
 
-function startGame(r, id) {
-    role = r;
+var GAME = null;
+
+NC = new NetCode({startGame: startGame, 
+                 setRole: setRole,
+                 showRemoteNPCs: showRemoteNPCs,
+                 removeNPC: removeNPC,
+                 showRemotePlayers: showRemotePlayers});
+
+
+//===========================================================================
+// CALLBACKS FOR NetCode Module
+//
+
+//---------------------------------------------
+// startGame
+//---------------------------------------------
+function startGame(id) {
     playerID = id;
 
-    if (game == null) {
+    if (GAME == null) {
         $("#loading").hide();
         
-        game = new Phaser.Game(800, 600, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
+        GAME = new Phaser.Game(800, 600, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
     } else {
         // if this is a restart, then possibly reset REMOTE characters
         if (remotePlayers != null) {
@@ -28,131 +32,33 @@ function startGame(r, id) {
         }
 
     }
-    debugText = r;
+    debugText = NC.getRole();
 }
 
-function preload() {
-
-    game.load.image('sky', 'assets/sky.png');
-    game.load.image('ground', 'assets/platform.png');
-    game.load.image('star', 'assets/star.png');
-    game.load.spritesheet('dude', 'assets/dude.png', 32, 48);
-    // AUDIO
-    aJSON = audioJSON();
-    console.log (aJSON);
-    game.load.audiosprite('sfx', 'assets/fx_mixdown.ogg', null, aJSON);
-
+//---------------------------------------------
+// setRole
+//---------------------------------------------
+function setRole(oldRole, newRole) {
+    debugText = newRole;
 }
 
-// Global variables
-var player;
-var playerID;
-var platforms;
-var cursors;
-var remotePlayers = null;
-
-var stars;
-var score = 0;
-var scoreText;
-var level = 1;
-var fx;
-var SEemitter;
-var MAX_SE_SPEED = 400;
-
-var PLAYER_XSPEED = 200;
-var PLAYER_JUMP = -450;
-
-var GROUND_HEIGHT = 32;
-
-var GRAVITY = 400;
-
-function create() {
-
-    createWorld();
-    createBkg();
-    createMap();
-    initSound();
-    createPlayers();
-    initNPC();
-    initControls();
-
-    // kick things off
-    if (role=="master" || role=="local") {
-        generateStars(stars, 5);
-    }    
-
-    scoreText.bringToTop();
-}    
-
-function createWorld() {
-    //  We're going to be using physics, so enable the Arcade Physics system
-    game.physics.startSystem(Phaser.Physics.ARCADE);
-    game.stage.disableVisibilityChange = true;   
-
-
-    game.world.setBounds(0, 0, 1600, 1200);
-    game.physics.arcade.setBounds(0,0,game.world.width, game.world.height-GROUND_HEIGHT+10);
-
-}
-function createBkg() {
-    //  A simple background for our game
-    var s = game.add.sprite(0, 0, 'sky');
-    s.scale.x = 2;
-    s = game.add.sprite(0, 600, 'sky');
-    s.scale.x = 2;
-    //  The score
-    scoreText = game.add.text(16, 16, ' Score: 0 ', { fontSize: '32px', fill: '#FFF' });
-
-    scoreText.font = 'Arial Black';
-    scoreText.fontSize = 40;
-    scoreText.fontWeight = 'bold';
-    scoreText.fixedToCamera = true;
-
-    scoreText.setShadow(3, 3, 'rgba(0, 0, 0, 0.5)', 0);
-
-}
-function initSound(){    
-
-    fx = game.add.audioSprite('sfx');
-    fx.allowMultiple = true;
-}
-function createMap() {
-    //  The platforms group contains the ground and the 2 ledges we can jump on
-    platforms = game.add.group();
-
-    //  We will enable physics for any object that is created in this group
-    platforms.enableBody = true;
-
-    // Here we create the ground.
-    var ground = platforms.create(0, game.world.height - GROUND_HEIGHT, 'ground');
-
-    //  Scale it to fit the width of the game (the original sprite is 400x32 in size)
-    ground.scale.setTo(4, 2);
-
-    //  This stops it from falling away when you jump on it
-    ground.body.immovable = true;
-
-    makePlatforms(200);
-    makePlatforms(600);
-    makePlatforms(-200);
-}
-
+//---------------------------------------------
+// showRemotePlayers
 // Show players that are provided by the server
-//
 // package is expected to be an array of objects
 //
 // [{p1}, {p2}]
 //
 // may contain other lists, but here we only look at players
 //
-function showPlayers(coords) {
+function showRemotePlayers(coords) {
 
     var rp;
     var rec;
 
     // create the group if not created yet
     if (remotePlayers == null) {
-        remotePlayers = game.add.group();
+        remotePlayers = GAME.add.group();
     } else {
         remotePlayers.removeAll(true);
     }
@@ -163,9 +69,9 @@ function showPlayers(coords) {
         rec = coords[i];
 
         // don't do anything for our own player
-        if (rec.id != netUserID) {
+        if (rec.id != NC.getUserID()) {
 
-            rp = remotePlayers.create(32, game.world.height - 150, 'dude');
+            rp = remotePlayers.create(32, GAME.world.height - 150, 'dude');
             setPlayerCharacteristics(rp);
             rp.syncID = rec.id;
             rp.x = rec.x;
@@ -182,18 +88,223 @@ function showPlayers(coords) {
     }
 }
 
+//---------------------------------------------
+// showRemoteNPCs
+//---------------------------------------------
+function showRemoteNPCs(coords) {
+
+    stars.removeAll(true);
+    generateStars (stars, coords.length, coords);
+}
+
+//---------------------------------------------
+// removeNPC
+//---------------------------------------------
+function removeNPC(id) {
+
+    stars.forEachAlive(function(star){
+
+        if (star.syncID == id) {
+            particleBurst(star.body.position, SEemitter);
+            fx.play("alien death");
+            star.kill();
+            maybeRegenerate();
+
+            console.log ("killed star " + star.syncID);
+        }   
+
+    }, this );
+}
+
+
+
+//===========================================================================
+// CALLBACKS FOR Phaser Game Module
+//
+
+// Global variables
+var player;
+var playerID;
+var platforms;
+var cursors;
+var remotePlayers = null;
+
+var stars;
+var score = 0;
+var scoreText;
+var level = 1;
+var fx;
+var SEemitter;
+
+
+var MAX_SE_SPEED = 400;
+var PLAYER_XSPEED = 200;
+var PLAYER_JUMP = -450;
+var GROUND_HEIGHT = 32;
+var GRAVITY = 400;
+
+
+
+//---------------------------------------------
+// preload
+//---------------------------------------------
+
+function preload() {
+
+    GAME.load.image('sky', 'assets/sky.png');
+    GAME.load.image('ground', 'assets/platform.png');
+    GAME.load.image('star', 'assets/star.png');
+    GAME.load.spritesheet('dude', 'assets/dude.png', 32, 48);
+    // AUDIO
+    aJSON = audioJSON();
+    console.log (aJSON);
+    GAME.load.audiosprite('sfx', 'assets/fx_mixdown.ogg', null, aJSON);
+
+}
+
+//---------------------------------------------
+// create
+//---------------------------------------------
+function create() {
+
+    createWorld();
+    createBkg();
+    createMap();
+    initSound();
+    createPlayers();
+    initNPC();
+    initControls();
+
+    // kick things off
+    if (NC.getRole()=="master" || NC.getRole()=="local") {
+        generateStars(stars, 5);
+    }    
+
+    scoreText.bringToTop();
+}    
+
+//---------------------------------------------
+// update
+//---------------------------------------------
+function update() {
+
+    player.onGround = false;
+    //  Collide the player and the stars with the platforms
+
+    GAME.physics.arcade.collide(remotePlayers, platforms);
+    GAME.physics.arcade.collide(player, platforms, setPlayerState);
+    GAME.physics.arcade.collide(stars, platforms, friction);
+    GAME.physics.arcade.collide(stars, stars);
+
+    //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
+    GAME.physics.arcade.overlap(player, stars, collectStar, checkOverlapBounds, this);
+    //GAME.physics.arcade.collide(player, stars, collectStar);
+
+    //  Reset the players velocity (movement)
+    player.body.velocity.x = 0;
+
+    if (cursors.left.isDown) {
+        player.body.velocity.x = -PLAYER_XSPEED;
+        player.animations.play('left');
+    }
+    else if (cursors.right.isDown) {
+        player.body.velocity.x = PLAYER_XSPEED;
+        player.animations.play('right');
+    }
+    else
+    {
+        //  Stand still
+        player.animations.stop();
+        player.frame = 4;
+    }
+    
+    //  Allow the player to jump if they are touching the ground.
+    if (cursors.up.isDown && player.body.touching.down && player.onGround)
+    {
+        player.body.velocity.y = PLAYER_JUMP;
+    }
+    NC.updateServerCoords(stars, player);
+}
+
+//---------------------------------------------
+// render
+//---------------------------------------------
+var debugText = "testing-->";
+function render() {
+    GAME.debug.text(debugText, 32, 80);
+}
+
+
+//===========================================================================
+//===========================================================================
+
+
+function createWorld() {
+    //  We're going to be using physics, so enable the Arcade Physics system
+    GAME.physics.startSystem(Phaser.Physics.ARCADE);
+    GAME.stage.disableVisibilityChange = true;   
+
+
+    GAME.world.setBounds(0, 0, 1600, 1200);
+    GAME.physics.arcade.setBounds(0,0,GAME.world.width, GAME.world.height-GROUND_HEIGHT+10);
+
+}
+function createBkg() {
+    //  A simple background for our GAME
+    var s = GAME.add.sprite(0, 0, 'sky');
+    s.scale.x = 2;
+    s = GAME.add.sprite(0, 600, 'sky');
+    s.scale.x = 2;
+    //  The score
+    scoreText = GAME.add.text(16, 16, ' Score: 0 ', { fontSize: '32px', fill: '#FFF' });
+
+    scoreText.font = 'Arial Black';
+    scoreText.fontSize = 40;
+    scoreText.fontWeight = 'bold';
+    scoreText.fixedToCamera = true;
+
+    scoreText.setShadow(3, 3, 'rgba(0, 0, 0, 0.5)', 0);
+
+}
+function initSound(){    
+
+    fx = GAME.add.audioSprite('sfx');
+    fx.allowMultiple = true;
+}
+function createMap() {
+    //  The platforms group contains the ground and the 2 ledges we can jump on
+    platforms = GAME.add.group();
+
+    //  We will enable physics for any object that is created in this group
+    platforms.enableBody = true;
+
+    // Here we create the ground.
+    var ground = platforms.create(0, GAME.world.height - GROUND_HEIGHT, 'ground');
+
+    //  Scale it to fit the width of the GAME (the original sprite is 400x32 in size)
+    ground.scale.setTo(4, 2);
+
+    //  This stops it from falling away when you jump on it
+    ground.body.immovable = true;
+
+    makePlatforms(200);
+    makePlatforms(600);
+    makePlatforms(-200);
+}
+
+
 
 function createPlayers() {
     // The player and its settings
-    player = game.add.sprite(32, game.world.height - 150, 'dude');
+    player = GAME.add.sprite(32, GAME.world.height - 150, 'dude');
     player.syncID = playerID;
     setPlayerCharacteristics(player);
-    game.camera.follow(player, Phaser.Camera.FOLLOW_TOPDOWN);
+    GAME.camera.follow(player, Phaser.Camera.FOLLOW_TOPDOWN);
 }
 
 function setPlayerCharacteristics(rp) {
     //  We need to enable physics on the player
-    game.physics.arcade.enable(rp);
+    GAME.physics.arcade.enable(rp);
 
     //  Player physics properties. Give the little guy a slight bounce.
     rp.body.bounce.y = 0.2;
@@ -208,11 +319,11 @@ function setPlayerCharacteristics(rp) {
 
 function initNPC() {
     //  Finally some stars to collect
-    stars = game.add.group();
+    stars = GAME.add.group();
 
     //  We will enable physics for any star that is created in this group
     stars.enableBody = true;
-    SEemitter = game.add.emitter(0, 0, 300);
+    SEemitter = GAME.add.emitter(0, 0, 300);
 
     SEemitter.makeParticles('star');
     SEemitter.gravity = 0;
@@ -220,7 +331,7 @@ function initNPC() {
 
 function initControls() {
     //  Our controls.
-    cursors = game.input.keyboard.createCursorKeys();
+    cursors = GAME.input.keyboard.createCursorKeys();
 }
 
 function makePlatforms(yoffset) {
@@ -246,60 +357,15 @@ function setPlayerState(play, platform) {
     play.onGround = true;
 }
 
-function update() {
-
-    player.onGround = false;
-    //  Collide the player and the stars with the platforms
-
-    game.physics.arcade.collide(remotePlayers, platforms);
-    game.physics.arcade.collide(player, platforms, setPlayerState);
-    game.physics.arcade.collide(stars, platforms, friction);
-    game.physics.arcade.collide(stars, stars);
-
-    //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
-    game.physics.arcade.overlap(player, stars, collectStar, checkOverlapBounds, this);
-    //game.physics.arcade.collide(player, stars, collectStar);
-
-    //  Reset the players velocity (movement)
-    player.body.velocity.x = 0;
-
-    if (cursors.left.isDown) {
-        player.body.velocity.x = -PLAYER_XSPEED;
-        player.animations.play('left');
-    }
-    else if (cursors.right.isDown) {
-        player.body.velocity.x = PLAYER_XSPEED;
-        player.animations.play('right');
-    }
-    else
-    {
-        //  Stand still
-        player.animations.stop();
-        player.frame = 4;
-    }
-    
-    //  Allow the player to jump if they are touching the ground.
-    if (cursors.up.isDown && player.body.touching.down && player.onGround)
-    {
-        player.body.velocity.y = PLAYER_JUMP;
-    }
-    updateServerCoords(stars, player, role);
-}
 
 function checkOverlapBounds(player, star) {
     return true;
 }
 
-function syncSlaveCoords(coords) {
-
-    stars.removeAll(true);
-    generateStars (stars, coords.length, coords);
-}
-
 
 function generateStars(sgrp, amt, coords) {
 
-    var spacing = game.world.width / amt;
+    var spacing = GAME.world.width / amt;
 
     //  Here we'll create 12 of them evenly spaced apart
     for (var i = 0; i < amt; i++)
@@ -338,13 +404,6 @@ function generateStars(sgrp, amt, coords) {
     }
 }
 
-var debugText = "testing-->";
-function render() {
-
-    game.debug.text(debugText, 32, 80);
-
-}
-
 function friction (star, platform) {
 
     var dir = -1;
@@ -360,22 +419,6 @@ function friction (star, platform) {
     }
 }
 
-function recordStarKill(id) {
-
-    stars.forEachAlive(function(star){
-
-        if (star.syncID == id) {
-            particleBurst(star.body.position, SEemitter);
-            fx.play("alien death");
-            star.kill();
-            maybeRegenerate();
-
-            console.log ("killed star " + star.syncID);
-        }   
-
-    }, this );
-}
-
 function collectStar (player, star) {
     
     // Removes the star from the screen
@@ -385,16 +428,16 @@ function collectStar (player, star) {
     //  Add and update the score
     score += 10;
     scoreText.text = ' Score: ' + score + " ";
-    updateServerScore(score);
+    NC.updateServerScore(score);
 
     console.log ("killing star " + star.syncID);
-    netRecordKill(star.syncID);
+    NC.netRecordKill(star.syncID);
     star.kill();
     maybeRegenerate();
 }
 
 function maybeRegenerate() {
-    if (stars.total == 0 && (role == "local" || role == "master")) {
+    if (stars.total == 0 && (NC.getRole() == "local" || NC.getRole() == "master")) {
 
         stars.removeAll(true);
         generateStars(stars, 5+level*3);
@@ -433,3 +476,12 @@ function sizeParticle(particle) {
         particle.scale.y = sc/1.5;
     }        
 }
+
+
+
+
+
+
+
+
+
