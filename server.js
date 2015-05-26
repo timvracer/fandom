@@ -1,38 +1,27 @@
 
 
+//--------------------------------------------------------------------------------------------
 //
-// connection-> registers the user by connection ID (as a user) - not "alive" yet
-// username-> client registers the user, associated with the connection ID, assigned slave or master
-//      -> startGame (role) sent to client to get things rolling
-// disconect-> client disconnect, connectionID no longer valid
+// NetCode Server
 //
-//
-// following methods are ignored by the client until startGame is completed
-//
-// score-> player score update, current player score recorded
-//
-// coords-> master update of NPC's (system of record)
-//      -> coordsSync sent to all clients with updated NPC coords (only slaves listen)
-// starkill-> client reports an NPC kill
-//      -> starkilled sent to all clients
 //
 //
 
 var fs = require('fs');
 var path = require('path');
 var bodyParser = require('body-parser');
-
 var express = require('express');
-
-app = express()
-server = require('http').createServer(app)
-io = require("socket.io").listen(server);
 
 
 // helper function - to copy the coffee script existenstial operator
 function exists(a) {return (a!==undefined && a!==null)}
 
-//======EXPRESS ROUTING ===========================
+//======EXPRESS ROUTING ==========================================
+
+
+var app = express()
+var server = require('http').createServer(app)
+var io = require("socket.io").listen(server);
 
 app.set('port', process.env.OPENSHIFT_NODEJS_PORT || 3000);
 app.set('ipaddr', process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1");
@@ -53,49 +42,66 @@ app.get('/api/socket-port', function(req,res) {
 });
 
 server.listen(app.get('port'), app.get('ipaddr'), function(){
-    console.log('Express server listening on  IP: ' + app.get('ipaddr') + ' and port ' + app.get('port'));
+    logger('Express server listening on  IP: ' + app.get('ipaddr') + ' and port ' + app.get('port'));
 });
 
 
 //---------------------------------------------------------------
-// Set up socket listeners------------------------
-//
+// Set up socket listeners
+//---------------------------------------------------------------
 io.on('connection', function(socket){
   // send the user their reg info
-    console.log('a user connected');
-    registerSocketUser (socket);
+    logger('a user connected');
+    createConnectionRecord(socket);
 
+//---------------------------------------------
+// username - client registration function
+//---------------------------------------------
     socket.on('username', function(pmsg) {
-        console.log("USER-CONNECT");
-        var msg = unpackMsg(pmsg);
-        recordUser (socket, msg, true);
+        logger("USER-CONNECT");
+        var msg = unpackMsg(socket, pmsg);
+        registerUser (socket, msg, true);
     });
-    //socket.on('username-reconnect', function(pmsg) {
-    //  console.log ("USER-RECONNECT");
-    //  var msg = unpackMsg(pmsg);
-    //  recordUser (socket, msg, false);
-    //});
+
+    //---------------------------------------------
+    // score - client score update
+    //---------------------------------------------
     socket.on('score', function(pmsg) {
-        var msg = unpackMsg(pmsg);
+        var msg = unpackMsg(socket, pmsg);
         recordScore (socket, msg);
     });
+    //---------------------------------------------
+    // coords - master client update of NPCs
+    //---------------------------------------------
     socket.on('coords', function(pmsg) {
-        var msg = unpackMsg(pmsg);
+        var msg = unpackMsg(socket, pmsg);
         recordCoords (socket, msg);
     });
+    //---------------------------------------------
+    // pcoords - all clients update their player pos
+    //---------------------------------------------
     socket.on('pcoords', function(pmsg) {
-        var msg = unpackMsg(pmsg);
+        var msg = unpackMsg(socket, pmsg);
         recordPCoords (socket, msg);
     });
-    socket.on('starkill', function(pmsg) {
-        var msg = unpackMsg(pmsg);
+    //---------------------------------------------
+    // npcKill - all clients report when they have
+    // killed/removed an NPC
+    //---------------------------------------------
+    socket.on('npcKill', function(pmsg) {
+        var msg = unpackMsg(socket, pmsg);
         broadcastKill(msg);
     });
-    // try to grab master if not set
+    //---------------------------------------------
+    // pick_me - when looking for a new master, 
+    // clients respond asking for the job
+    //---------------------------------------------
     socket.on('pick_me', function(pmsg) {
         maybeNewMaster(pmsg);
     });
-
+    //---------------------------------------------
+    // disconnect - a client disconnected
+    //---------------------------------------------
     socket.on('disconnect', function(msg){
         disconnectUser(socket, msg);
     });
@@ -104,34 +110,80 @@ io.on('connection', function(socket){
 
 
 //---------------------------------------------------------------------------------
-//
+// CORE functions
+//---------------------------------------------------------------------------------
+
 var currentMaster = null;
 var masterCoords = null;
-var pcoordsCache = {players: []};
 var connects = {}; 
 
 
-function unpackMsg(pmsg) {
-    return pmsg.msg;
+//---------------------------------------------------------------------------------
+// unpackMsg - all messages come in the form of {userID: ..., msg: ...}
+// this returns the msg portion
+//---------------------------------------------------------------------------------
+function unpackMsg(socket, pmsg) {
+    if ('msg' in pmsg) {
+        return pmsg.msg;
+    }
+    return "";
 }
 
-function clientUserID(socket) {
+//---------------------------------------------------------------------------------
+// connectionID
+//
+// get the connection ID from the given socket 
+//---------------------------------------------------------------------------------
+function connectionID(socket) {
     return socket.client.conn.id;
 }
-
+//---------------------------------------------------------------------------------
+// getConnectRecord
+//
+// gets the connection record for the given socket by matching the connectionID
+// userID is ignored at this point 
+//---------------------------------------------------------------------------------
 function getConnectRecord(socket) {
-    return connects[clientUserID(socket)];
+    var id = connectionID(socket);
+    if (id in connects) {
+        return connects[id];
+    }
+    console.log ("ERROR: no connection record for given socket");
+    // ?? socket.disconnect();
+    return null;
 }
-
+//---------------------------------------------------------------------------------
+// clientUserRole
+//
+// returns the user ROLE (local, master, slave) for the given socket based
+// on the connection ID
+//---------------------------------------------------------------------------------
 function clientUserRole(socket) {
-    return connects[clientUserID(socket)].role;
+    var id = connectionID(socket);
+    if (id in connects) {
+        return connects[id].role;
+    }
+    console.log ("ERROR: no connection record for given socket");
+    // ?? socket.disconnect();
+    return null;    
 }
+//---------------------------------------------------------------------------------
+// removeConnectRecord
+//
+// Removes the connection record for the given key
+//---------------------------------------------------------------------------------
 function removeConnectRecord(sid) {
-    delete connects[sid];
+    if (sid in connects) {
+        delete connects[sid];
+    } else {
+        console.log ("WARNING: tried to delete non-existent connection record");
+    }
 }
-function removePcoordsCacheRecord(sid) {
-    delete pcoordsCache.players[sid];
-}
+//---------------------------------------------------------------------------------
+// findUserConnectionRecord
+//
+// find the connection record for the given userID (finds first)
+//---------------------------------------------------------------------------------
 function findUserConnectionRecord (id) {
     for (var key in connects) {
         if (connects[key].userID == id) {
@@ -140,49 +192,64 @@ function findUserConnectionRecord (id) {
     }
 }
 
-function registerSocketUser(socket) {
-    console.log ("client IP: " + socket.client.conn.remoteAddress);
-    console.log ("connection ID: " + clientUserID(socket));
-    connects[clientUserID(socket)] = {socket: socket, socketID: clientUserID(socket), userID: null, role: "none"};
-    console.log (connects);
+//---------------------------------------------------------------------------------
+// createConnectionRecord
+//
+// This function is called on the initial socket connect, it creates a connection 
+// record with role set to none, and userID to null
+//---------------------------------------------------------------------------------
+function createConnectionRecord(socket) {
+    logger ("client IP: " + socket.client.conn.remoteAddress);
+    logger ("connection ID: " + connectionID(socket));
+    connects[connectionID(socket)] = {socket: socket, socketID: connectionID(socket), userID: null, role: "none"};
+    logger (connects);
 }
 
-
-function recordUser(socket, name, start) {
+//---------------------------------------------------------------------------------
+// registerUser
+//
+// when the "username" record is received, which is the first message the client sends
+// after a successful connection, we register the userID into the connection record
+// that was already established (or should have been)
+//---------------------------------------------------------------------------------
+function registerUser(socket, name, start) {
 
     var role = null;
+    logger ("registering user " + name + " connid = " + connectionID(socket));
 
-    console.log ("registering user " + name + " connid = " + clientUserID(socket));
-
+    //**** NEXT
+    // Get rid of currentMaster
+    <BREAK CODE HERE>
+    
     if (currentMaster == null) {
         role = 'master';
-        currentMaster = clientUserID(socket);
-        console.log ("REGISTERED MASTER : " + clientUserID(socket));
+        currentMaster = connectionID(socket);
+        logger ("REGISTERED MASTER : " + connectionID(socket));
     } else {
         role = 'slave';
-        console.log ("REGISTERED SLAVE : " + clientUserID(socket));
+        logger ("REGISTERED SLAVE : " + connectionID(socket));
     }
 
-    connects[clientUserID(socket)].role = role;
-    connects[clientUserID(socket)].userID = name;
+    connects[connectionID(socket)].role = role;
+    connects[connectionID(socket)].userID = name;
 
     if (start) {
-        socket.emit("startGame", {role: role, id: clientUserID(socket)});
+        socket.emit("startGame", {role: role, id: connectionID(socket)});
     }  
-    console.log(connects);
+    logger(connects);
 
 }
 
 function broadcastKill(msg) {
-    console.log ("starkill " + msg);
-    io.sockets.emit('starkilled', msg);
+    logger ("starkill " + msg);
+    io.sockets.emit('npckilled', msg);
 }
 
 function recordScore(socket, score) {
     var rec = getConnectRecord(socket);
     if (exists(rec)) {
         rec.score = score;
-        console.log ("Score registered for " + clientUserID(socket) + " : " + score);
+        logger ("Score registered for " + connectionID(socket) + " : " + score);
     }
 }
 
@@ -192,24 +259,24 @@ var SEND_FRAC = 0;
 function recordCoords(socket, coords) {
     // send coords out to any slaves
     var rec = getConnectRecord(socket);
-    if (exists(rec)) {
-        rec.coords = coords;
-        io.sockets.emit("coordsSync", coords);
+    if (exists(rec) && 'npcs' in coords) {
+        rec.coords = coords.npcs;
+        io.sockets.emit("coordsSync", coords.npcs);
 
         if (scount++ > SEND_FRAC) {
             scount = 0;
-            sendPlayerCoords();
+            sendPlayerInfo();
         }
     }    
 }
 
-function sendPlayerCoords() {
+function sendPlayerInfo() {
 
     var res = {};
-    for (var key in pcoordsCache) {
-        res[key] = [];
-        for (var k2 in pcoordsCache[key]) {
-            res[key].push(pcoordsCache[key][k2]);
+    res['remotePlayers'] = [];
+    for (var key in connects) {
+        if ('pcoords' in connects[key]) {
+            res['remotePlayers'].push(connects[key]['pcoords']);
         }
     }
     io.sockets.emit("pcoordsSync", res);
@@ -218,9 +285,8 @@ function sendPlayerCoords() {
 function recordPCoords(socket, coords) {
     // send coords out to any slaves
     var rec = getConnectRecord(socket);
-    if (exists(rec)) {
-        connects[rec.socketID].pcoords = coords;
-        pcoordsCache.players[rec.socketID] = coords;
+    if (exists(rec) && 'player' in coords) {
+        connects[rec.socketID].pcoords = coords.player;
     }
 }
 
@@ -230,8 +296,7 @@ function disconnectUser(socket, msg) {
 
     if (exists(rec)) {
 
-        console.log(rec.role + ' user disconnected - id: ' + rec.socketID + ' - ' + rec.userID);
-        removePcoordsCacheRecord(rec.socketID);
+        logger(rec.role + ' user disconnected - id: ' + rec.socketID + ' - ' + rec.userID);
         removeConnectRecord(rec.socketID);
 
         if (missingMaster()) {
@@ -239,18 +304,17 @@ function disconnectUser(socket, msg) {
             findNewMaster();
         }
     }    
-    console.log ("disconnect");  
-    console.log(connects);
-    console.log(pcoordsCache);
+    logger ("disconnect");  
+    logger(connects);
 }
 
 function findNewMaster() {
-    console.log ("need new master");
+    logger ("need new master");
     io.sockets.emit("needNewMaster", " ");
 }
 function maybeNewMaster(msg) {
     var id = msg.userID;
-    console.log ("maybe new master " + id);
+    logger ("maybe new master " + id);
 
     rec = findUserConnectionRecord(id);
     if (currentMaster == null) {
@@ -269,9 +333,17 @@ function missingMaster() {
             return false;
         }
     }
-    console.log ("missing master!");
+    logger ("missing master!");
     return true;
 }
 
+LOGGING_ON = true;
+//==================================================================================
+// LOGGER
+function logger(msg) {
+    if (LOGGING_ON) {
+        console.log(msg);
+    }
+}
 
 

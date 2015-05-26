@@ -1,10 +1,19 @@
 
-// On initial connect, send a registration to server with "username"
-// the given userID is associated with the socketID.  
+//--------------------------------------------------------------------------------------
 //
-
-
-	//var CALLBACKS = callbacks;
+// NetCode module 
+//
+// Usage: 
+// 
+// var NC = new NetCode({<callbacks - see below>});
+//
+// This will attempt to connect to a server, and will then call the startGame callback to
+// get things rolling.  use getRole() to determine what role your client is playing.
+// 'local' indicates no connection is established
+// 'master' indicates this client is in control of NPC's, and must report their positions
+// 'slave' will receive NPC info from the server, but still reports player specific info
+//
+//
 
 function NetCode(callbacks) {
 
@@ -83,72 +92,53 @@ function NetCode(callbacks) {
 	    netSocketSend("score", score);
 	};
 
+	//--------------------------------------------
+	// UpdateServerCoords
+	//
+	// send {npcs: [], player[]}
+	//
+	//--------------------------------------------
 
-	this.updateServerCoords = function(stars, ply) {
+	this.updateServerCoords = function(coords) {
+
+		var d = new Date().getTime();
 
 		// if not connected, don't do all the work to prepare package
 		if (ROLE=='local') {
 			return;
 		}
 
-		var coords = {stars: []};
-		var d = new Date().getTime();
-
 		if (d - USC_lastUpdate > UPDATE_FREQUENCY) {
-
 			USC_lastUpdate = d;
 
-			if (ROLE == "master") {
-
-				stars.forEachAlive(function(star) {
-					coords.stars.push({id: star.syncID,
-								 x: star.x, 
-								 y: star.y, 
-								 xv: star.body.velocity.x, 
-								 yv: star.body.velocity.y,
-								 xb: star.body.bounce.x,
-								 yb: star.body.bounce.y,
-								 av: star.body.angularVelocity});
-				}, this);
-
+			console.log (coords);
+			if ('npcs' in coords) {
 				netSocketSend("coords", coords);
 			}	
 
-			reportPlayerPos(ply);
+			if ('player' in coords) {
+				netSocketSend("pcoords", coords);
+			}	
 		}	
 
-	}
+	};
 
 	// Report to server you killed a star
 	this.netRecordKill = function(id) {
 		console.log ("recording kill - " + id);
-		netSocketSend("starkill", id);
-	}
+		netSocketSend("npcKill", id);
+	};
 
 	this.getUserID = function() {
 		return NET_USER_ID;
-	}
+	};
 	this.getRole = function() {
 		return ROLE;
-	}
+	};
 
 
 	//=====================================================================================
 	// SUPPORT FUNCTIONS
-
-	function reportPlayerPos(ply) {
-
-		var pcoords = {
-			x: ply.x,
-			y: ply.y,
-			vx: ply.body.velocity.x,
-			vy: ply.body.velocity.y,
-			id: NET_USER_ID,
-			frame: ply.frame
-		};
-
-		netSocketSend("pcoords", pcoords);
-	}
 
 	function netStartGame(msg) {
 
@@ -165,7 +155,7 @@ function NetCode(callbacks) {
 		SOCKET.on("coordsSync", function(coords){
 			if (ROLE=='slave') {
 				if ('showRemoteNPCs' in CALLBACKS) {
-					CALLBACKS.showRemoteNPCs(coords.stars);
+					CALLBACKS.showRemoteNPCs(coords);
 				}	
 			}	
 		});
@@ -173,19 +163,22 @@ function NetCode(callbacks) {
 		// Initialize Messages that both process
 		// NPC was destroyed, should be removed from the board
 		//
-	    SOCKET.on("starkilled", function(msg){
-	    	console.log ("received starkilled msg " + msg);
+	    SOCKET.on("npckilled", function(msg){
+	    	console.log ("received npckilled msg " + msg);
 	    	if ('removeNPC' in CALLBACKS) {
 		    	CALLBACKS.removeNPC(msg);
 		    }	
 	    });
 
 	    // Update other players on the board
+	    // array of various coords given, players are in 'remotePlayers'
 	    //
-	    SOCKET.on("pcoordsSync", function(msg){
-	    	if ('showRemotePlayers' in CALLBACKS) {
-		    	CALLBACKS.showRemotePlayers(msg.players);
-		    }	
+	    SOCKET.on("pcoordsSync", function(coords){
+	    	if ('remotePlayers' in coords) {
+		    	if ('showRemotePlayers' in CALLBACKS) {
+			    	CALLBACKS.showRemotePlayers(coords.remotePlayers);
+			    }	
+			}    
 		});
 
 	    // Need new master

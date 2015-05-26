@@ -1,14 +1,41 @@
 // helper function - to copy the coffee script existenstial operator
 function exists(a) {return (a!==undefined && a!==null)}
 
-
-var GAME = null;
-
 NC = new NetCode({startGame: startGame, 
                  setRole: setRole,
                  showRemoteNPCs: showRemoteNPCs,
                  removeNPC: removeNPC,
                  showRemotePlayers: showRemotePlayers});
+
+
+
+// Global variables
+var GAME = null;
+
+// Store game globals into an object to keep it clean
+// and prevent namespace collisions
+var GV = {
+    player: null,
+    playerID: null,
+    platforms: null,
+    cursors: null,
+    remotePlayers: null,
+
+    stars: null,
+    score: 0,
+    scoreText: null,
+    level: 1,
+    fx: null,
+    SEemitter: null,
+};
+
+// "constants"
+var MAX_SE_SPEED = 400;
+var PLAYER_XSPEED = 200;
+var PLAYER_JUMP = -450;
+var GROUND_HEIGHT = 32;
+var GRAVITY = 400;
+
 
 
 //===========================================================================
@@ -19,7 +46,7 @@ NC = new NetCode({startGame: startGame,
 // startGame
 //---------------------------------------------
 function startGame(id) {
-    playerID = id;
+    GV.playerID = id;
 
     if (GAME == null) {
         $("#loading").hide();
@@ -27,8 +54,8 @@ function startGame(id) {
         GAME = new Phaser.Game(800, 600, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
     } else {
         // if this is a restart, then possibly reset REMOTE characters
-        if (remotePlayers != null) {
-            remotePlayers.removeAll(true);
+        if (GV.remotePlayers != null) {
+            GV.remotePlayers.removeAll(true);
         }
 
     }
@@ -57,10 +84,10 @@ function showRemotePlayers(coords) {
     var rec;
 
     // create the group if not created yet
-    if (remotePlayers == null) {
-        remotePlayers = GAME.add.group();
+    if (GV.remotePlayers == null) {
+        GV.remotePlayers = GAME.add.group();
     } else {
-        remotePlayers.removeAll(true);
+        GV.remotePlayers.removeAll(true);
     }
 
     for (var i=0; i<coords.length; i++) {
@@ -71,7 +98,7 @@ function showRemotePlayers(coords) {
         // don't do anything for our own player
         if (rec.id != NC.getUserID()) {
 
-            rp = remotePlayers.create(32, GAME.world.height - 150, 'dude');
+            rp = GV.remotePlayers.create(32, GAME.world.height - 150, 'dude');
             setPlayerCharacteristics(rp);
             rp.syncID = rec.id;
             rp.x = rec.x;
@@ -93,8 +120,8 @@ function showRemotePlayers(coords) {
 //---------------------------------------------
 function showRemoteNPCs(coords) {
 
-    stars.removeAll(true);
-    generateStars (stars, coords.length, coords);
+    GV.stars.removeAll(true);
+    generateStars (GV.stars, coords.length, coords);
 }
 
 //---------------------------------------------
@@ -102,11 +129,11 @@ function showRemoteNPCs(coords) {
 //---------------------------------------------
 function removeNPC(id) {
 
-    stars.forEachAlive(function(star){
+    GV.stars.forEachAlive(function(star){
 
         if (star.syncID == id) {
-            particleBurst(star.body.position, SEemitter);
-            fx.play("alien death");
+            particleBurst(star.body.position, GV.SEemitter);
+            GV.fx.play("alien death");
             star.kill();
             maybeRegenerate();
 
@@ -121,29 +148,6 @@ function removeNPC(id) {
 //===========================================================================
 // CALLBACKS FOR Phaser Game Module
 //
-
-// Global variables
-var player;
-var playerID;
-var platforms;
-var cursors;
-var remotePlayers = null;
-
-var stars;
-var score = 0;
-var scoreText;
-var level = 1;
-var fx;
-var SEemitter;
-
-
-var MAX_SE_SPEED = 400;
-var PLAYER_XSPEED = 200;
-var PLAYER_JUMP = -450;
-var GROUND_HEIGHT = 32;
-var GRAVITY = 400;
-
-
 
 //---------------------------------------------
 // preload
@@ -177,10 +181,10 @@ function create() {
 
     // kick things off
     if (NC.getRole()=="master" || NC.getRole()=="local") {
-        generateStars(stars, 5);
+        generateStars(GV.stars, 5);
     }    
 
-    scoreText.bringToTop();
+    GV.scoreText.bringToTop();
 }    
 
 //---------------------------------------------
@@ -188,42 +192,43 @@ function create() {
 //---------------------------------------------
 function update() {
 
-    player.onGround = false;
-    //  Collide the player and the stars with the platforms
+    GV.player.onGround = false;
+    //  Collide the GV.player and the stars with the platforms
 
-    GAME.physics.arcade.collide(remotePlayers, platforms);
-    GAME.physics.arcade.collide(player, platforms, setPlayerState);
-    GAME.physics.arcade.collide(stars, platforms, friction);
-    GAME.physics.arcade.collide(stars, stars);
+    GAME.physics.arcade.collide(GV.remotePlayers, GV.platforms);
+    GAME.physics.arcade.collide(GV.player, GV.platforms, setPlayerState);
+    GAME.physics.arcade.collide(GV.stars, GV.platforms, friction);
+    GAME.physics.arcade.collide(GV.stars, GV.stars);
 
     //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
-    GAME.physics.arcade.overlap(player, stars, collectStar, checkOverlapBounds, this);
+    GAME.physics.arcade.overlap(GV.player, GV.stars, collectStar, checkOverlapBounds, this);
     //GAME.physics.arcade.collide(player, stars, collectStar);
 
     //  Reset the players velocity (movement)
-    player.body.velocity.x = 0;
+    GV.player.body.velocity.x = 0;
 
-    if (cursors.left.isDown) {
-        player.body.velocity.x = -PLAYER_XSPEED;
-        player.animations.play('left');
+    if (GV.cursors.left.isDown) {
+        GV.player.body.velocity.x = -PLAYER_XSPEED;
+        GV.player.animations.play('left');
     }
-    else if (cursors.right.isDown) {
-        player.body.velocity.x = PLAYER_XSPEED;
-        player.animations.play('right');
+    else if (GV.cursors.right.isDown) {
+        GV.player.body.velocity.x = PLAYER_XSPEED;
+        GV.player.animations.play('right');
     }
     else
     {
         //  Stand still
-        player.animations.stop();
-        player.frame = 4;
+        GV.player.animations.stop();
+        GV.player.frame = 4;
     }
     
     //  Allow the player to jump if they are touching the ground.
-    if (cursors.up.isDown && player.body.touching.down && player.onGround)
+    if (GV.cursors.up.isDown && GV.player.body.touching.down && GV.player.onGround)
     {
-        player.body.velocity.y = PLAYER_JUMP;
+        GV.player.body.velocity.y = PLAYER_JUMP;
     }
-    NC.updateServerCoords(stars, player);
+
+    updateServer();
 }
 
 //---------------------------------------------
@@ -237,6 +242,44 @@ function render() {
 
 //===========================================================================
 //===========================================================================
+
+//----------------------------------------------
+// updateServer
+//
+// send {npcs: [], player: []}
+//
+
+function updateServer () {
+    var coords = {};
+
+    if (NC.getRole() == "master") {
+
+        coords['npcs'] = [];
+
+        GV.stars.forEachAlive(function(star) {
+            coords['npcs'].push({id: star.syncID,
+                         npcType: 'star',
+                         x: star.x, 
+                         y: star.y, 
+                         xv: star.body.velocity.x, 
+                         yv: star.body.velocity.y,
+                         xb: star.body.bounce.x,
+                         yb: star.body.bounce.y,
+                         av: star.body.angularVelocity});
+        }, this);
+    }   
+
+    coords['player'] = {
+            x: GV.player.x,
+            y: GV.player.y,
+            vx: GV.player.body.velocity.x,
+            vy: GV.player.body.velocity.y,
+            id: NC.getUserID(),
+            frame: GV.player.frame
+        };
+
+    NC.updateServerCoords(coords);
+}
 
 
 function createWorld() {
@@ -256,30 +299,30 @@ function createBkg() {
     s = GAME.add.sprite(0, 600, 'sky');
     s.scale.x = 2;
     //  The score
-    scoreText = GAME.add.text(16, 16, ' Score: 0 ', { fontSize: '32px', fill: '#FFF' });
+    GV.scoreText = GAME.add.text(16, 16, ' Score: 0 ', { fontSize: '32px', fill: '#FFF' });
 
-    scoreText.font = 'Arial Black';
-    scoreText.fontSize = 40;
-    scoreText.fontWeight = 'bold';
-    scoreText.fixedToCamera = true;
+    GV.scoreText.font = 'Arial Black';
+    GV.scoreText.fontSize = 40;
+    GV.scoreText.fontWeight = 'bold';
+    GV.scoreText.fixedToCamera = true;
 
-    scoreText.setShadow(3, 3, 'rgba(0, 0, 0, 0.5)', 0);
+    GV.scoreText.setShadow(3, 3, 'rgba(0, 0, 0, 0.5)', 0);
 
 }
 function initSound(){    
 
-    fx = GAME.add.audioSprite('sfx');
-    fx.allowMultiple = true;
+    GV.fx = GAME.add.audioSprite('sfx');
+    GV.fx.allowMultiple = true;
 }
 function createMap() {
     //  The platforms group contains the ground and the 2 ledges we can jump on
-    platforms = GAME.add.group();
+    GV.platforms = GAME.add.group();
 
     //  We will enable physics for any object that is created in this group
-    platforms.enableBody = true;
+    GV.platforms.enableBody = true;
 
     // Here we create the ground.
-    var ground = platforms.create(0, GAME.world.height - GROUND_HEIGHT, 'ground');
+    var ground = GV.platforms.create(0, GAME.world.height - GROUND_HEIGHT, 'ground');
 
     //  Scale it to fit the width of the GAME (the original sprite is 400x32 in size)
     ground.scale.setTo(4, 2);
@@ -296,10 +339,10 @@ function createMap() {
 
 function createPlayers() {
     // The player and its settings
-    player = GAME.add.sprite(32, GAME.world.height - 150, 'dude');
-    player.syncID = playerID;
-    setPlayerCharacteristics(player);
-    GAME.camera.follow(player, Phaser.Camera.FOLLOW_TOPDOWN);
+    GV.player = GAME.add.sprite(32, GAME.world.height - 150, 'dude');
+    GV.player.syncID = GV.playerID;
+    setPlayerCharacteristics(GV.player);
+    GAME.camera.follow(GV.player, Phaser.Camera.FOLLOW_TOPDOWN);
 }
 
 function setPlayerCharacteristics(rp) {
@@ -319,37 +362,37 @@ function setPlayerCharacteristics(rp) {
 
 function initNPC() {
     //  Finally some stars to collect
-    stars = GAME.add.group();
+    GV.stars = GAME.add.group();
 
     //  We will enable physics for any star that is created in this group
-    stars.enableBody = true;
-    SEemitter = GAME.add.emitter(0, 0, 300);
+    GV.stars.enableBody = true;
+    GV.SEemitter = GAME.add.emitter(0, 0, 300);
 
-    SEemitter.makeParticles('star');
-    SEemitter.gravity = 0;
+    GV.SEemitter.makeParticles('star');
+    GV.SEemitter.gravity = 0;
 }
 
 function initControls() {
     //  Our controls.
-    cursors = GAME.input.keyboard.createCursorKeys();
+    GV.cursors = GAME.input.keyboard.createCursorKeys();
 }
 
 function makePlatforms(yoffset) {
 
-    var ledge = platforms.create(400, 420+yoffset, 'ground');
+    var ledge = GV.platforms.create(400, 420+yoffset, 'ground');
     ledge.body.immovable = true;
-    var ledge = platforms.create(1000, 420+yoffset, 'ground');
-    ledge.body.immovable = true;
-
-    ledge = platforms.create(-150, 350+yoffset, 'ground');
+    var ledge = GV.platforms.create(1000, 420+yoffset, 'ground');
     ledge.body.immovable = true;
 
-    ledge = platforms.create(200, 185+yoffset, 'ground');
-    ledge.body.immovable = true;
-    ledge = platforms.create(900, 185+yoffset, 'ground');
+    ledge = GV.platforms.create(-150, 350+yoffset, 'ground');
     ledge.body.immovable = true;
 
-    ledge = platforms.create(800, 300+yoffset, 'ground');
+    ledge = GV.platforms.create(200, 185+yoffset, 'ground');
+    ledge.body.immovable = true;
+    ledge = GV.platforms.create(900, 185+yoffset, 'ground');
+    ledge.body.immovable = true;
+
+    ledge = GV.platforms.create(800, 300+yoffset, 'ground');
     ledge.body.immovable = true;
 
 }
@@ -422,13 +465,13 @@ function friction (star, platform) {
 function collectStar (player, star) {
     
     // Removes the star from the screen
-    particleBurst(star.body.position, SEemitter);
-    fx.play("alien death");
+    particleBurst(star.body.position, GV.SEemitter);
+    GV.fx.play("alien death");
 
     //  Add and update the score
-    score += 10;
-    scoreText.text = ' Score: ' + score + " ";
-    NC.updateServerScore(score);
+    GV.score += 10;
+    GV.scoreText.text = ' Score: ' + GV.score + " ";
+    NC.updateServerScore(GV.score);
 
     console.log ("killing star " + star.syncID);
     NC.netRecordKill(star.syncID);
@@ -437,11 +480,11 @@ function collectStar (player, star) {
 }
 
 function maybeRegenerate() {
-    if (stars.total == 0 && (NC.getRole() == "local" || NC.getRole() == "master")) {
+    if (GV.stars.total == 0 && (NC.getRole() == "local" || NC.getRole() == "master")) {
 
-        stars.removeAll(true);
-        generateStars(stars, 5+level*3);
-        level++;
+        GV.stars.removeAll(true);
+        generateStars(GV.stars, 5+GV.level*3);
+        GV.level++;
     }    
 }
 
