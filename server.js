@@ -113,9 +113,7 @@ io.on('connection', function(socket){
 // CORE functions
 //---------------------------------------------------------------------------------
 
-var currentMaster = null;
-var masterCoords = null;
-var connects = {}; 
+var CONNECTS = {}; 
 
 
 //---------------------------------------------------------------------------------
@@ -145,8 +143,8 @@ function connectionID(socket) {
 //---------------------------------------------------------------------------------
 function getConnectRecord(socket) {
     var id = connectionID(socket);
-    if (id in connects) {
-        return connects[id];
+    if (id in CONNECTS) {
+        return CONNECTS[id];
     }
     console.log ("ERROR: no connection record for given socket");
     // ?? socket.disconnect();
@@ -160,8 +158,8 @@ function getConnectRecord(socket) {
 //---------------------------------------------------------------------------------
 function clientUserRole(socket) {
     var id = connectionID(socket);
-    if (id in connects) {
-        return connects[id].role;
+    if (id in CONNECTS) {
+        return CONNECTS[id].role;
     }
     console.log ("ERROR: no connection record for given socket");
     // ?? socket.disconnect();
@@ -173,8 +171,8 @@ function clientUserRole(socket) {
 // Removes the connection record for the given key
 //---------------------------------------------------------------------------------
 function removeConnectRecord(sid) {
-    if (sid in connects) {
-        delete connects[sid];
+    if (sid in CONNECTS) {
+        delete CONNECTS[sid];
     } else {
         console.log ("WARNING: tried to delete non-existent connection record");
     }
@@ -185,11 +183,25 @@ function removeConnectRecord(sid) {
 // find the connection record for the given userID (finds first)
 //---------------------------------------------------------------------------------
 function findUserConnectionRecord (id) {
-    for (var key in connects) {
-        if (connects[key].userID == id) {
-            return connects[key];
+    for (var key in CONNECTS) {
+        if (CONNECTS[key].userID == id) {
+            return CONNECTS[key];
         }
     }
+}
+//---------------------------------------------------------------------------------
+// findMasterRecord
+//
+// find the connection record for the master (first one) - there should not be
+// any duplicate!
+//---------------------------------------------------------------------------------
+function findMasterRecord() {
+    for (var key in CONNECTS) {
+        if (CONNECTS[key].role == 'master') {
+            return CONNECTS[key];
+        }
+    }
+    return null;
 }
 
 //---------------------------------------------------------------------------------
@@ -201,8 +213,8 @@ function findUserConnectionRecord (id) {
 function createConnectionRecord(socket) {
     logger ("client IP: " + socket.client.conn.remoteAddress);
     logger ("connection ID: " + connectionID(socket));
-    connects[connectionID(socket)] = {socket: socket, socketID: connectionID(socket), userID: null, role: "none"};
-    logger (connects);
+    CONNECTS[connectionID(socket)] = {socket: socket, socketID: connectionID(socket), userID: null, role: "none"};
+    logger (CONNECTS);
 }
 
 //---------------------------------------------------------------------------------
@@ -217,26 +229,21 @@ function registerUser(socket, name, start) {
     var role = null;
     logger ("registering user " + name + " connid = " + connectionID(socket));
 
-    //**** NEXT
-    // Get rid of currentMaster
-    <BREAK CODE HERE>
-    
-    if (currentMaster == null) {
+    if (findMasterRecord() == null) {
         role = 'master';
-        currentMaster = connectionID(socket);
         logger ("REGISTERED MASTER : " + connectionID(socket));
     } else {
         role = 'slave';
         logger ("REGISTERED SLAVE : " + connectionID(socket));
     }
 
-    connects[connectionID(socket)].role = role;
-    connects[connectionID(socket)].userID = name;
+    CONNECTS[connectionID(socket)].role = role;
+    CONNECTS[connectionID(socket)].userID = name;
 
     if (start) {
         socket.emit("startGame", {role: role, id: connectionID(socket)});
     }  
-    logger(connects);
+    logger(CONNECTS);
 
 }
 
@@ -274,9 +281,9 @@ function sendPlayerInfo() {
 
     var res = {};
     res['remotePlayers'] = [];
-    for (var key in connects) {
-        if ('pcoords' in connects[key]) {
-            res['remotePlayers'].push(connects[key]['pcoords']);
+    for (var key in CONNECTS) {
+        if ('pcoords' in CONNECTS[key]) {
+            res['remotePlayers'].push(CONNECTS[key]['pcoords']);
         }
     }
     io.sockets.emit("pcoordsSync", res);
@@ -286,7 +293,7 @@ function recordPCoords(socket, coords) {
     // send coords out to any slaves
     var rec = getConnectRecord(socket);
     if (exists(rec) && 'player' in coords) {
-        connects[rec.socketID].pcoords = coords.player;
+        CONNECTS[rec.socketID].pcoords = coords.player;
     }
 }
 
@@ -299,13 +306,12 @@ function disconnectUser(socket, msg) {
         logger(rec.role + ' user disconnected - id: ' + rec.socketID + ' - ' + rec.userID);
         removeConnectRecord(rec.socketID);
 
-        if (missingMaster()) {
-            currentMaster = null;
+        if (findMasterRecord() == null) {
             findNewMaster();
         }
     }    
     logger ("disconnect");  
-    logger(connects);
+    logger(CONNECTS);
 }
 
 function findNewMaster() {
@@ -317,24 +323,13 @@ function maybeNewMaster(msg) {
     logger ("maybe new master " + id);
 
     rec = findUserConnectionRecord(id);
-    if (currentMaster == null) {
-        // critical section here, will need a true atomic semaphore
-        //
-        currentMaster = rec.socketID;
+    //
+    // CRITICAL SECTION --- need to implement a process semphore
+    //
+    if (findMasterRecord() == null) {
         rec.role = 'master';
         rec.socket.emit ("roleChange", "master");
     }
-}
-
-function missingMaster() {
-
-    for (var key in connects) {
-        if (connects[key].role == 'master') {
-            return false;
-        }
-    }
-    logger ("missing master!");
-    return true;
 }
 
 LOGGING_ON = true;
