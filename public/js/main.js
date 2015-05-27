@@ -129,7 +129,9 @@ function showRemotePlayers(coords) {
 //---------------------------------------------
 function showRemoteNPCs(coords) {
 
-    GV.stars.removeAll(true);
+    if (GV.stars != null) {
+        GV.stars.removeAll(true);
+    }    
     generateStars (GV.stars, coords.length, coords);
 }
 
