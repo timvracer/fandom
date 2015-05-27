@@ -121,11 +121,9 @@ function NetCode(callbacks) {
 		if (d - USC_lastUpdate > UPDATE_FREQUENCY) {
 			USC_lastUpdate = d;
 
-			console.log (coords);
 			if ('npcs' in coords) {
 				netSocketSend("coords", coords);
 			}	
-
 			if ('player' in coords) {
 				netSocketSend("pcoords", coords);
 			}	

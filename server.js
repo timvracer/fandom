@@ -396,7 +396,7 @@ function maybeNewMaster(msg) {
     // CRITICAL SECTION --- need to implement a process semphore
     //
     if (findMasterRecord() == null && !PROCESSING) {
-        PROCESSING = TRUE;
+        PROCESSING = true;
         rec.role = 'master';
         rec.socket.emit ("roleChange", "master");
     }
