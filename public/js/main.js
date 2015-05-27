@@ -201,8 +201,7 @@ function update() {
     GAME.physics.arcade.collide(GV.stars, GV.stars);
 
     //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
-    GAME.physics.arcade.overlap(GV.player, GV.stars, collectStar, checkOverlapBounds, this);
-    //GAME.physics.arcade.collide(player, stars, collectStar);
+    GAME.physics.arcade.overlap(GV.player, GV.stars, collectStar);
 
     //  Reset the players velocity (movement)
     GV.player.body.velocity.x = 0;
@@ -246,6 +245,7 @@ function render() {
 //----------------------------------------------
 // updateServer
 //
+// send NPC coords (if master) to server, and send player coords as well
 // send {npcs: [], player: []}
 //
 
@@ -281,7 +281,9 @@ function updateServer () {
     NC.updateServerCoords(coords);
 }
 
-
+//---------------------------------------------
+// createWorld
+//---------------------------------------------
 function createWorld() {
     //  We're going to be using physics, so enable the Arcade Physics system
     GAME.physics.startSystem(Phaser.Physics.ARCADE);
@@ -292,6 +294,9 @@ function createWorld() {
     GAME.physics.arcade.setBounds(0,0,GAME.world.width, GAME.world.height-GROUND_HEIGHT+10);
 
 }
+//---------------------------------------------
+// createBkg
+//---------------------------------------------
 function createBkg() {
     //  A simple background for our GAME
     var s = GAME.add.sprite(0, 0, 'sky');
@@ -309,11 +314,17 @@ function createBkg() {
     GV.scoreText.setShadow(3, 3, 'rgba(0, 0, 0, 0.5)', 0);
 
 }
+//---------------------------------------------
+// initSound
+//---------------------------------------------
 function initSound(){    
 
     GV.fx = GAME.add.audioSprite('sfx');
     GV.fx.allowMultiple = true;
 }
+//---------------------------------------------
+// createMap
+//---------------------------------------------
 function createMap() {
     //  The platforms group contains the ground and the 2 ledges we can jump on
     GV.platforms = GAME.add.group();
@@ -335,8 +346,9 @@ function createMap() {
     makePlatforms(-200);
 }
 
-
-
+//---------------------------------------------
+// createPlayers
+//---------------------------------------------
 function createPlayers() {
     // The player and its settings
     GV.player = GAME.add.sprite(32, GAME.world.height - 150, 'dude');
@@ -345,6 +357,9 @@ function createPlayers() {
     GAME.camera.follow(GV.player, Phaser.Camera.FOLLOW_TOPDOWN);
 }
 
+//---------------------------------------------
+// setPlayerCharacteristics
+//---------------------------------------------
 function setPlayerCharacteristics(rp) {
     //  We need to enable physics on the player
     GAME.physics.arcade.enable(rp);
@@ -360,23 +375,33 @@ function setPlayerCharacteristics(rp) {
     rp.animations.add('right', [5, 6, 7, 8], 7, true);        
 }
 
+//---------------------------------------------
+// initNPC
+//---------------------------------------------
 function initNPC() {
     //  Finally some stars to collect
     GV.stars = GAME.add.group();
 
     //  We will enable physics for any star that is created in this group
     GV.stars.enableBody = true;
-    GV.SEemitter = GAME.add.emitter(0, 0, 300);
 
+    // init the emitter for the star explosion
+    GV.SEemitter = GAME.add.emitter(0, 0, 300);
     GV.SEemitter.makeParticles('star');
     GV.SEemitter.gravity = 0;
 }
 
+//---------------------------------------------
+// initControls
+//---------------------------------------------
 function initControls() {
     //  Our controls.
     GV.cursors = GAME.input.keyboard.createCursorKeys();
 }
 
+//---------------------------------------------
+// makePlatforms
+//---------------------------------------------
 function makePlatforms(yoffset) {
 
     var ledge = GV.platforms.create(400, 420+yoffset, 'ground');
@@ -396,16 +421,17 @@ function makePlatforms(yoffset) {
     ledge.body.immovable = true;
 
 }
+
+//---------------------------------------------
+// setPlayerState
+//---------------------------------------------
 function setPlayerState(play, platform) {
     play.onGround = true;
 }
 
-
-function checkOverlapBounds(player, star) {
-    return true;
-}
-
-
+//---------------------------------------------
+// generateStars
+//---------------------------------------------
 function generateStars(sgrp, amt, coords) {
 
     var spacing = GAME.world.width / amt;
@@ -447,6 +473,9 @@ function generateStars(sgrp, amt, coords) {
     }
 }
 
+//---------------------------------------------
+// friction
+//---------------------------------------------
 function friction (star, platform) {
 
     var dir = -1;
@@ -462,6 +491,9 @@ function friction (star, platform) {
     }
 }
 
+//---------------------------------------------
+// collectStar
+//---------------------------------------------
 function collectStar (player, star) {
     
     // Removes the star from the screen
@@ -479,6 +511,9 @@ function collectStar (player, star) {
     maybeRegenerate();
 }
 
+//---------------------------------------------
+// maybeRegenerate
+//---------------------------------------------
 function maybeRegenerate() {
     if (GV.stars.total == 0 && (NC.getRole() == "local" || NC.getRole() == "master")) {
 
@@ -488,6 +523,9 @@ function maybeRegenerate() {
     }    
 }
 
+//---------------------------------------------
+// particleBurst
+//---------------------------------------------
 function particleBurst(pointer, emitter) {
 
     //  Position the emitter where the mouse/touch event was
@@ -507,6 +545,9 @@ function particleBurst(pointer, emitter) {
 
 }
 
+//---------------------------------------------
+// sizeParticle
+//---------------------------------------------
 function sizeParticle(particle) {
     if (particle != null) {
         

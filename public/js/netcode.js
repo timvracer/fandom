@@ -58,8 +58,11 @@ function NetCode(callbacks) {
 			console.log("Socket Port received: " + obj.port);
 			if (exists(obj.port)) {
 
+				//---------------------------------------
+				// Create the socket and try to connect
 			    SOCKET = io(":" + obj.port);
 
+				//---------------------------------------
 			    // Connect Error
 			    SOCKET.on("connect_error", function(msg) {
 			    	console.log ("CONNECT_ERROR");
@@ -69,6 +72,7 @@ function NetCode(callbacks) {
 					}	
 			    });
 
+				//---------------------------------------
 			    // Connection made
 			    SOCKET.on("connect", function(msg) {
 			    	console.log("connect received");
@@ -88,6 +92,12 @@ function NetCode(callbacks) {
 	});
 
 
+	//--------------------------------------------
+	// updateServerScore
+	//
+	// self report current score: TODO for obvious reasons this is
+	// not ideal, must change to server based scoring 
+	//--------------------------------------------
 	this.updateServerScore = function(score) {
 	    netSocketSend("score", score);
 	};
@@ -95,15 +105,15 @@ function NetCode(callbacks) {
 	//--------------------------------------------
 	// UpdateServerCoords
 	//
-	// send {npcs: [], player[]}
+	// currently sends NPC coords (if master) seperately from
+	// player coords.  not sure what is most efficient with sockets
 	//
 	//--------------------------------------------
-
 	this.updateServerCoords = function(coords) {
 
 		var d = new Date().getTime();
 
-		// if not connected, don't do all the work to prepare package
+		// if not connected, don't do anything
 		if (ROLE=='local') {
 			return;
 		}
@@ -123,15 +133,27 @@ function NetCode(callbacks) {
 
 	};
 
-	// Report to server you killed a star
+	//--------------------------------------------
+	// netRecordKill
+	//
+	// reports to the server that an NPC was killed or removed
+	// TODO this obviously is easily hacked, so we need to add
+	// server side coordinate checking
+	//--------------------------------------------
 	this.netRecordKill = function(id) {
 		console.log ("recording kill - " + id);
 		netSocketSend("npcKill", id);
 	};
 
+	//--------------------------------------------
+	// getUserID
+	//--------------------------------------------
 	this.getUserID = function() {
 		return NET_USER_ID;
 	};
+	//--------------------------------------------
+	// getRole
+	//--------------------------------------------
 	this.getRole = function() {
 		return ROLE;
 	};
@@ -140,18 +162,27 @@ function NetCode(callbacks) {
 	//=====================================================================================
 	// SUPPORT FUNCTIONS
 
+	//--------------------------------------------
+	// netStartGame
+	//
+	// called after user registratin succeeds (from server).  calls the startGame
+	// callback and sets the role.  Sets up the SOCKET functions 
+	//--------------------------------------------
 	function netStartGame(msg) {
 
 		console.log ("Game start as " + msg.role);
 
 		ROLE = msg.role;
 
+		// call the startGame callback to kick things off
 		if ('startGame' in CALLBACKS) {
 			CALLBACKS.startGame(NET_USER_ID);
 		}
-		console.log ("enabling coordsSync message");
 
-		// message to get new NPC coordinates
+		//---------------------------------------------
+		// coordsSync
+		// process NPC coords sync message from server
+		//
 		SOCKET.on("coordsSync", function(coords){
 			if (ROLE=='slave') {
 				if ('showRemoteNPCs' in CALLBACKS) {
@@ -160,7 +191,8 @@ function NetCode(callbacks) {
 			}	
 		});
 
-		// Initialize Messages that both process
+		//---------------------------------------------
+		// removeNPC
 		// NPC was destroyed, should be removed from the board
 		//
 	    SOCKET.on("npckilled", function(msg){
@@ -170,6 +202,8 @@ function NetCode(callbacks) {
 		    }	
 	    });
 
+		//---------------------------------------------
+		// pcoordsSync
 	    // Update other players on the board
 	    // array of various coords given, players are in 'remotePlayers'
 	    //
@@ -181,12 +215,18 @@ function NetCode(callbacks) {
 			}    
 		});
 
-	    // Need new master
+		//---------------------------------------------
+		// needNewMaser
+	    // Server asking who wants to be the new master
+	    // respond indicating candidacy. TODO: add logic to
+	    // determine if this client is a goood candidate (ping time)
 	    //
 	    SOCKET.on("needNewMaster", function(msg) {
 	    	netSocketSend ("pick_me", NET_USER_ID);
 		});
 
+		//---------------------------------------------
+		// roleChange
 	    // Listen for a promotion to master
 	    //
 	    SOCKET.on("roleChange", function(msg){
@@ -195,9 +235,12 @@ function NetCode(callbacks) {
 	}
 
 
+	//--------------------------------------------
+	// changeRole
+	// change the role of this client as specified.
+	//--------------------------------------------
 	function changeRole(msg) {
 		var oldRole = ROLE;
-		//netSocketSend ("statusChangeAck", NET_USER_ID);
 		ROLE = msg;
 		if ('setRole' in CALLBACKS) {
 			CALLBACKS.setRole(oldRole, ROLE);
@@ -205,6 +248,8 @@ function NetCode(callbacks) {
 	}
 
 
+	//--------------------------------------------
+	// netSocketSend
 	// Once connection and user ID are establihed, how to send user-based messages
 	// 
 	function netSocketSend(op, msg) {
@@ -212,6 +257,5 @@ function NetCode(callbacks) {
 			SOCKET.emit(op, {userID: NET_USER_ID, msg: msg});
 		}	
 	}
-//}
 
 }

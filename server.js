@@ -240,6 +240,10 @@ function registerUser(socket, name, start) {
     CONNECTS[connectionID(socket)].role = role;
     CONNECTS[connectionID(socket)].userID = name;
 
+    //
+    // TODO: need to validate that we receive messages from the master within 
+    // a short period of time, otherwise we demote the master (if others are avail)
+    //
     if (start) {
         socket.emit("startGame", {role: role, id: connectionID(socket)});
     }  
@@ -247,11 +251,25 @@ function registerUser(socket, name, start) {
 
 }
 
+//---------------------------------------------------------------------------------
+// broadcastKill
+//
+// send to all clients the death/removal of an NPC
+//
+// TODO: Note, this may become part of the coords message, in which dead npc's are
+// indicated in the coords package.  Again, reduces traffic/noise
+//---------------------------------------------------------------------------------
 function broadcastKill(msg) {
     logger ("starkill " + msg);
     io.sockets.emit('npckilled', msg);
 }
 
+//---------------------------------------------------------------------------------
+// recordScore
+//
+// record the self-reported score from the client, this of course will be changed
+// to be counted on the server in the future (totally hackable right now)
+//---------------------------------------------------------------------------------
 function recordScore(socket, score) {
     var rec = getConnectRecord(socket);
     if (exists(rec)) {
@@ -260,7 +278,16 @@ function recordScore(socket, score) {
     }
 }
 
-var scount = 0;
+//---------------------------------------------------------------------------------
+// recordCoords
+//
+// called when the master reports NPC coordinates.  We in turn directly broadcast
+// both the npc coords, and the combined players coords to all clients.
+//
+// TODO: This will be placed on an independent event loop and sent at a configured
+// time cadence independent of the receipt of coords from the master
+//---------------------------------------------------------------------------------
+var SCOUNT = 0;
 var SEND_FRAC = 0;
 
 function recordCoords(socket, coords) {
@@ -270,13 +297,21 @@ function recordCoords(socket, coords) {
         rec.coords = coords.npcs;
         io.sockets.emit("coordsSync", coords.npcs);
 
-        if (scount++ > SEND_FRAC) {
-            scount = 0;
+        // used to send player information fractionally to NPC coord info
+        // all this goes away when we refactor coords sending
+        // TODO
+        if (SCOUNT++ > SEND_FRAC) {
+            SCOUNT = 0;
             sendPlayerInfo();
         }
     }    
 }
 
+//---------------------------------------------------------------------------------
+// sendPlayerInfo
+//
+// send all player coordinates to all clients
+//---------------------------------------------------------------------------------
 function sendPlayerInfo() {
 
     var res = {};
@@ -289,6 +324,13 @@ function sendPlayerInfo() {
     io.sockets.emit("pcoordsSync", res);
 }
 
+//---------------------------------------------------------------------------------
+// recordPCoords
+//
+// called when any client submits their player-related coordinates.  Only supports
+// player position today, but will support all player related objects
+//
+//---------------------------------------------------------------------------------
 function recordPCoords(socket, coords) {
     // send coords out to any slaves
     var rec = getConnectRecord(socket);
@@ -297,6 +339,17 @@ function recordPCoords(socket, coords) {
     }
 }
 
+//---------------------------------------------------------------------------------
+// disconnectUser
+//
+// Called when a disconnect is received from a client (may or may not reconnect quickly)
+// removes the associated connection record 
+//
+// TODO: today this works because the client is maintaining player specific info like
+// score.  When this is stored by the server, we either have to maintain the connection
+// record, or create a new store indexed by userID (session ID).  Alternatively, we may
+// store persistant pan-session info in a DB indexed by cookieID.  
+//---------------------------------------------------------------------------------
 function disconnectUser(socket, msg) {
 
     var rec = getConnectRecord(socket);
@@ -314,10 +367,26 @@ function disconnectUser(socket, msg) {
     logger(CONNECTS);
 }
 
+//---------------------------------------------------------------------------------
+// findNewMaster
+//
+// Called anytime it is detected that there is no longer a master connected
+// tries to find any slave who is willing to be a master
+//---------------------------------------------------------------------------------
 function findNewMaster() {
     logger ("need new master");
     io.sockets.emit("needNewMaster", " ");
 }
+//---------------------------------------------------------------------------------
+// maybeNewMaster
+//
+// called when a slave client says they want to be the new master
+// TODO: critical section needs to be managed by a shared key if 
+// using more than one server per world
+//
+//---------------------------------------------------------------------------------
+var PROCESSING = false;
+
 function maybeNewMaster(msg) {
     var id = msg.userID;
     logger ("maybe new master " + id);
@@ -326,10 +395,12 @@ function maybeNewMaster(msg) {
     //
     // CRITICAL SECTION --- need to implement a process semphore
     //
-    if (findMasterRecord() == null) {
+    if (findMasterRecord() == null && !PROCESSING) {
+        PROCESSING = TRUE;
         rec.role = 'master';
         rec.socket.emit ("roleChange", "master");
     }
+    PROCESSING = false;
 }
 
 LOGGING_ON = true;
