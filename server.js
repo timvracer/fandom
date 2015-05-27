@@ -105,6 +105,13 @@ io.on('connection', function(socket){
     socket.on('disconnect', function(msg){
         disconnectUser(socket, msg);
     });
+    //---------------------------------------------
+    // ping - used for latency checks
+    //---------------------------------------------
+    socket.on('ping', function() {
+        socket.emit('pong');
+    });
+    
 });
 
 

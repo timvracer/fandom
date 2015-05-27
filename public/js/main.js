@@ -5,6 +5,7 @@ NC = new NetCode({startGame: startGame,
                  setRole: setRole,
                  showRemoteNPCs: showRemoteNPCs,
                  removeNPC: removeNPC,
+                 latencyUpdate: latencyUpdate,
                  showRemotePlayers: showRemotePlayers});
 
 
@@ -27,6 +28,7 @@ var GV = {
     level: 1,
     fx: null,
     SEemitter: null,
+    latency: 0
 };
 
 // "constants"
@@ -67,6 +69,13 @@ function startGame(id) {
 //---------------------------------------------
 function setRole(oldRole, newRole) {
     debugText = newRole;
+}
+
+//---------------------------------------------
+// latencyUpdate
+//---------------------------------------------
+function latencyUpdate(lat) {
+    GV.latency = lat;
 }
 
 //---------------------------------------------
@@ -235,7 +244,7 @@ function update() {
 //---------------------------------------------
 var debugText = "testing-->";
 function render() {
-    GAME.debug.text(debugText, 32, 80);
+    GAME.debug.text(debugText + " : "  + GV.latency + "ms", 32, 80);
 }
 
 

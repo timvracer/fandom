@@ -19,6 +19,7 @@ function NetCode(callbacks) {
 
 	var SOCKET_PORT = 8081;
 	var UPDATE_FREQUENCY = 100; // in ms
+	var LATENCY_CHECK_FREQUENCY = 2000; // in ms
 	var SOCKET;
 	var NET_USER_ID = new Date().getTime();
 	var ROLE = 'local';
@@ -36,7 +37,8 @@ function NetCode(callbacks) {
 	//		setRole: function(role, oldRole),      		// role = string. local, master, slave
 	//		showRemotePlayers: function()(rPlayers),    // rPlayers = array of player coord objects 
 	//		showRemoteNPCs: function(rNpcs), 			// rNpcs = array of npc coords (to slaves)
-	//		removeNPC: removeNPCs						// indicator that an NPC is to be removed
+	//		removeNPC: removeNPCs,						// indicator that an NPC is to be removed
+	//		latencyUpdate: latencyUpdate				// called every 2 seconds with server latency
 	//		
 	// }
 	//
@@ -82,7 +84,24 @@ function NetCode(callbacks) {
 				    });
 
 					SOCKET.emit("username", {userID: NET_USER_ID, msg: NET_USER_ID});
-				});    
+				}); 
+
+				//--------------------------------------------
+				// set up latency check
+				// 
+				if ('latencyUpdate' in CALLBACKS) {
+					setInterval(function() {
+					  var startTime = Date.now();
+					  //
+					  // send server a 'ping'
+					  SOCKET.emit('ping');
+					  //
+					  // Server returns 'pong'
+					  SOCKET.on('pong', function() {
+					  	CALLBACKS.latencyUpdate(Date.now() - startTime);
+					  });
+					}, LATENCY_CHECK_FREQUENCY);
+				}
 
 			} else {
 				console.log ("No socket provided, dynamic updates disabled");
