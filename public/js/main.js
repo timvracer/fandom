@@ -325,11 +325,12 @@ function createButtons() {
 
     // arrow buttons for mobile
 
-    button = GAME.add.button(100, GAME.height - 100, 'leftarrow', null, this, 0, 0, 1, 0);
+    button = GAME.add.button(50, GAME.height - 100, 'leftarrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
     button.onInputDown.add(function() {GV.leftPress = true}, this);
     button.onInputUp.add(function() {GV.leftPress = false}, this);
     button.bringToTop();
+    button.scale.x = 1.5;
 
     button = GAME.add.button(320, GAME.height - 100, 'rightarrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
@@ -337,6 +338,7 @@ function createButtons() {
     button.onInputUp.add(function() {GV.rightPress = false}, this);
     button.bringToTop();
     button.fixedtoCamera = false;
+    button.scale.x = 1.5;
 
     button = GAME.add.button(640, GAME.height - 100, 'uparrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
@@ -344,6 +346,7 @@ function createButtons() {
     button.onInputUp.add(function() {GV.upPress = false}, this);
     button.bringToTop();
     button.fixedtoCamera = true;
+    button.scale.x = 1.5;
 
 }
 
