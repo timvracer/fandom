@@ -28,7 +28,11 @@ var GV = {
     level: 1,
     fx: null,
     SEemitter: null,
-    latency: 0
+    latency: 0,
+
+    upPress: false,
+    leftPress: false,
+    rightPress: false
 };
 
 // "constants"
@@ -37,6 +41,7 @@ var PLAYER_XSPEED = 200;
 var PLAYER_JUMP = -450;
 var GROUND_HEIGHT = 32;
 var GRAVITY = 400;
+var BUTTON_AREA_HEIGHT = 100;
 
 
 
@@ -53,7 +58,7 @@ function startGame(id) {
     if (GAME == null) {
         $("#loading").hide();
         
-        GAME = new Phaser.Game(800, 600, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
+        GAME = new Phaser.Game(800, 700, Phaser.CANVAS, 'testing-camera', { preload: preload, create: create, update: update, render: render }); 
     } else {
         // if this is a restart, then possibly reset REMOTE characters
         if (GV.remotePlayers != null) {
@@ -107,7 +112,7 @@ function showRemotePlayers(coords) {
         // don't do anything for our own player
         if (rec.id != NC.getUserID()) {
 
-            rp = GV.remotePlayers.create(32, GAME.world.height - 150, 'dude');
+            rp = GV.remotePlayers.create(32, GAME.world.height - BUTTON_AREA_HEIGHT -150, 'dude');
             setPlayerCharacteristics(rp);
             rp.syncID = rec.id;
             rp.x = rec.x;
@@ -174,6 +179,9 @@ function preload() {
     aJSON = audioJSON();
     console.log (aJSON);
     GAME.load.audiosprite('sfx', 'assets/fx_mixdown.ogg', null, aJSON);
+    GAME.load.spritesheet('uparrow', 'assets/uparrows.png', 100, 96, 2);
+    GAME.load.spritesheet('leftarrow', 'assets/leftarrows.png', 100, 100, 2);
+    GAME.load.spritesheet('rightarrow', 'assets/rightarrows.png', 100, 100, 2);
 
 }
 
@@ -189,6 +197,7 @@ function create() {
     createPlayers();
     initNPC();
     initControls();
+    createButtons();
 
     // kick things off
     if (NC.getRole()=="master" || NC.getRole()=="local") {
@@ -217,11 +226,11 @@ function update() {
     //  Reset the players velocity (movement)
     GV.player.body.velocity.x = 0;
 
-    if (GV.cursors.left.isDown) {
+    if (GV.cursors.left.isDown || GV.leftPress) {
         GV.player.body.velocity.x = -PLAYER_XSPEED;
         GV.player.animations.play('left');
     }
-    else if (GV.cursors.right.isDown) {
+    else if (GV.cursors.right.isDown || GV.rightPress) {
         GV.player.body.velocity.x = PLAYER_XSPEED;
         GV.player.animations.play('right');
     }
@@ -233,7 +242,7 @@ function update() {
     }
     
     //  Allow the player to jump if they are touching the ground.
-    if (GV.cursors.up.isDown && GV.player.body.touching.down && GV.player.onGround)
+    if ( (GV.cursors.up.isDown || GV.upPress) && GV.player.body.touching.down && GV.player.onGround)
     {
         GV.player.body.velocity.y = PLAYER_JUMP;
     }
@@ -296,15 +305,48 @@ function updateServer () {
 // createWorld
 //---------------------------------------------
 function createWorld() {
+
     //  We're going to be using physics, so enable the Arcade Physics system
     GAME.physics.startSystem(Phaser.Physics.ARCADE);
     GAME.stage.disableVisibilityChange = true;   
 
 
-    GAME.world.setBounds(0, 0, 1600, 1200);
-    GAME.physics.arcade.setBounds(0,0,GAME.world.width, GAME.world.height-GROUND_HEIGHT+10);
+    GAME.world.setBounds(0, 0, 1600, 1200 + BUTTON_AREA_HEIGHT);
+    GAME.physics.arcade.setBounds(0,0,GAME.world.width, GAME.world.height - BUTTON_AREA_HEIGHT - GROUND_HEIGHT+10);
+}
+
+var button;
+//---------------------------------------------
+// createButtons
+//---------------------------------------------
+function createButtons() {
+
+    //var button;
+
+    // arrow buttons for mobile
+
+    button = GAME.add.button(100, GAME.height - 100, 'leftarrow', null, this, 0, 0, 1, 0);
+    button.fixedToCamera = true;
+    button.onInputDown.add(function() {GV.leftPress = true}, this);
+    button.onInputUp.add(function() {GV.leftPress = false}, this);
+    button.bringToTop();
+
+    button = GAME.add.button(320, GAME.height - 100, 'rightarrow', null, this, 0, 0, 1, 0);
+    button.fixedToCamera = true;
+    button.onInputDown.add(function() {GV.rightPress = true}, this);
+    button.onInputUp.add(function() {GV.rightPress = false}, this);
+    button.bringToTop();
+    button.fixedtoCamera = false;
+
+    button = GAME.add.button(640, GAME.height - 100, 'uparrow', null, this, 0, 0, 1, 0);
+    button.fixedToCamera = true;
+    button.onInputDown.add(function() {GV.upPress = true}, this);
+    button.onInputUp.add(function() {GV.upPress = false}, this);
+    button.bringToTop();
+    button.fixedtoCamera = true;
 
 }
+
 //---------------------------------------------
 // createBkg
 //---------------------------------------------
@@ -344,10 +386,10 @@ function createMap() {
     GV.platforms.enableBody = true;
 
     // Here we create the ground.
-    var ground = GV.platforms.create(0, GAME.world.height - GROUND_HEIGHT, 'ground');
+    var ground = GV.platforms.create(0, GAME.world.height - GROUND_HEIGHT - BUTTON_AREA_HEIGHT, 'ground');
 
     //  Scale it to fit the width of the GAME (the original sprite is 400x32 in size)
-    ground.scale.setTo(4, 2);
+    ground.scale.setTo(4, 1);
 
     //  This stops it from falling away when you jump on it
     ground.body.immovable = true;
@@ -362,7 +404,7 @@ function createMap() {
 //---------------------------------------------
 function createPlayers() {
     // The player and its settings
-    GV.player = GAME.add.sprite(32, GAME.world.height - 150, 'dude');
+    GV.player = GAME.add.sprite(32, GAME.world.height - 150 - BUTTON_AREA_HEIGHT, 'dude');
     GV.player.syncID = GV.playerID;
     setPlayerCharacteristics(GV.player);
     GAME.camera.follow(GV.player, Phaser.Camera.FOLLOW_TOPDOWN);
@@ -415,6 +457,7 @@ function initControls() {
 //---------------------------------------------
 function makePlatforms(yoffset) {
 
+    //yoffset -= BUTTON_AREA_HEIGHT*2;
     var ledge = GV.platforms.create(400, 420+yoffset, 'ground');
     ledge.body.immovable = true;
     var ledge = GV.platforms.create(1000, 420+yoffset, 'ground');
@@ -571,12 +614,6 @@ function sizeParticle(particle) {
         particle.scale.y = sc/1.5;
     }        
 }
-
-
-
-
-
-
 
 
 
