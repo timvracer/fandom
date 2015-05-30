@@ -315,27 +315,26 @@ function createWorld() {
     GAME.physics.arcade.setBounds(0,0,GAME.world.width, GAME.world.height - BUTTON_AREA_HEIGHT - GROUND_HEIGHT+10);
 }
 
-var button;
 //---------------------------------------------
 // createButtons
 //---------------------------------------------
 function createButtons() {
 
-    //var button;
+    var button;
 
     // arrow buttons for mobile
 
     button = GAME.add.button(50, GAME.height - 100, 'leftarrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
-    button.onInputDown.add(function() {GV.leftPress = true}, this);
-    button.onInputUp.add(function() {GV.leftPress = false}, this);
+    button.onInputOver.add(function() {GV.leftPress = true}, this);
+    button.onInputOut.add(function() {GV.leftPress = false}, this);
     button.bringToTop();
     button.scale.x = 1.5;
 
     button = GAME.add.button(320, GAME.height - 100, 'rightarrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
-    button.onInputDown.add(function() {GV.rightPress = true}, this);
-    button.onInputUp.add(function() {GV.rightPress = false}, this);
+    button.onInputOver.add(function() {GV.rightPress = true}, this);
+    button.onInputOut.add(function() {GV.rightPress = false}, this);
     button.bringToTop();
     button.fixedtoCamera = false;
     button.scale.x = 1.5;
@@ -491,7 +490,7 @@ function setPlayerState(play, platform) {
 //---------------------------------------------
 function generateStars(sgrp, amt, coords) {
 
-    var spacing = GAME.world.width / amt;
+    var spacing = GV.GAME.world.width / amt;
 
     //  Here we'll create 12 of them evenly spaced apart
     for (var i = 0; i < amt; i++)
