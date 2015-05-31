@@ -41,7 +41,7 @@ var PLAYER_XSPEED = 200;
 var PLAYER_JUMP = -450;
 var GROUND_HEIGHT = 32;
 var GRAVITY = 400;
-var BUTTON_AREA_HEIGHT = 100;
+var BUTTON_AREA_HEIGHT = 150;
 
 
 
@@ -328,6 +328,7 @@ function createButtons() {
     button.fixedToCamera = true;
     button.onInputOver.add(function() {GV.leftPress = true}, this);
     button.onInputOut.add(function() {GV.leftPress = false}, this);
+    button.onInputUp.add(function() {GV.leftPress = false}, this);
     button.bringToTop();
     button.scale.x = 1.5;
 
@@ -490,7 +491,7 @@ function setPlayerState(play, platform) {
 //---------------------------------------------
 function generateStars(sgrp, amt, coords) {
 
-    var spacing = GV.GAME.world.width / amt;
+    var spacing = GAME.world.width / amt;
 
     //  Here we'll create 12 of them evenly spaced apart
     for (var i = 0; i < amt; i++)
