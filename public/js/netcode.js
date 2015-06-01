@@ -37,8 +37,9 @@ function NetCode(callbacks) {
 	//		setRole: function(role, oldRole),      		// role = string. local, master, slave
 	//		showRemotePlayers: function()(rPlayers),    // rPlayers = array of player coord objects 
 	//		showRemoteNPCs: function(rNpcs), 			// rNpcs = array of npc coords (to slaves)
-	//		removeNPC: removeNPCs,						// indicator that an NPC is to be removed
+	//		NPCkill: NPCkill,							// indicator that an NPC is to be removed
 	//		latencyUpdate: latencyUpdate				// called every 2 seconds with server latency
+	//		updateScore: updateScore					// new score from the server for display
 	//		
 	// }
 	//
@@ -112,16 +113,6 @@ function NetCode(callbacks) {
 
 
 	//--------------------------------------------
-	// updateServerScore
-	//
-	// self report current score: TODO for obvious reasons this is
-	// not ideal, must change to server based scoring 
-	//--------------------------------------------
-	this.updateServerScore = function(score) {
-	    netSocketSend("score", score);
-	};
-
-	//--------------------------------------------
 	// UpdateServerCoords
 	//
 	// currently sends NPC coords (if master) seperately from
@@ -145,7 +136,7 @@ function NetCode(callbacks) {
 			}	
 			if ('player' in coords) {
 				netSocketSend("pcoords", coords);
-			}	
+			}
 		}	
 
 	};
@@ -213,10 +204,12 @@ function NetCode(callbacks) {
 		// NPC was destroyed, should be removed from the board
 		//
 	    SOCKET.on("npckilled", function(msg){
-	    	console.log ("received npckilled msg " + msg);
-	    	if ('removeNPC' in CALLBACKS) {
-		    	CALLBACKS.removeNPC(msg);
+	    	console.log ("received npckilled msg ");
+	    	if ('NPCkill' in CALLBACKS) {
+	    		console.log(msg);
+		    	CALLBACKS.NPCkill(msg.msg);  // the msg is the ID
 		    }	
+		    return;
 	    });
 
 		//---------------------------------------------

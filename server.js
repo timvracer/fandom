@@ -64,13 +64,6 @@ io.on('connection', function(socket){
     });
 
     //---------------------------------------------
-    // score - client score update
-    //---------------------------------------------
-    socket.on('score', function(pmsg) {
-        var msg = unpackMsg(socket, pmsg);
-        recordScore (socket, msg);
-    });
-    //---------------------------------------------
     // coords - master client update of NPCs
     //---------------------------------------------
     socket.on('coords', function(pmsg) {
@@ -89,8 +82,7 @@ io.on('connection', function(socket){
     // killed/removed an NPC
     //---------------------------------------------
     socket.on('npcKill', function(pmsg) {
-        var msg = unpackMsg(socket, pmsg);
-        broadcastKill(msg);
+        processKill(socket, pmsg);
     });
     //---------------------------------------------
     // pick_me - when looking for a new master, 
@@ -111,7 +103,7 @@ io.on('connection', function(socket){
     socket.on('ping', function() {
         socket.emit('pong');
     });
-    
+
 });
 
 
@@ -202,9 +194,15 @@ function findUserConnectionRecord (id) {
 // find the connection record for the master (first one) - there should not be
 // any duplicate!
 //---------------------------------------------------------------------------------
+var masterRecCacheID = 0;
+
 function findMasterRecord() {
+    if ((masterRecCacheID in CONNECTS) && [masterRecCacheID].role=='master') {
+        return CONNECTS[masterRecCacheID];
+    }
     for (var key in CONNECTS) {
         if (CONNECTS[key].role == 'master') {
+            masterRecCacheID = key;
             return CONNECTS[key];
         }
     }
@@ -222,6 +220,23 @@ function createConnectionRecord(socket) {
     logger ("connection ID: " + connectionID(socket));
     CONNECTS[connectionID(socket)] = {socket: socket, socketID: connectionID(socket), userID: null, role: "none"};
     logger (CONNECTS);
+}
+
+//---------------------------------------------------------------------------------
+// getNPCRecord
+//
+// given an NPC ID, returns the record of that NPC
+//---------------------------------------------------------------------------------
+function getNPCCoords(id) {
+    var rec = findMasterRecord();
+    if ('coords' in rec) {
+        for (var i = 0; i < rec.coords.length; i++) {
+            if (rec.coords[i].id == id) {
+                return rec.coords[i];
+            }
+        }
+    }    
+    return null;
 }
 
 //---------------------------------------------------------------------------------
@@ -259,6 +274,53 @@ function registerUser(socket, name, start) {
 }
 
 //---------------------------------------------------------------------------------
+// processKill
+//
+// a client consumed an NPC - we validate that the strike is valid by comparing
+// the coordinates of the player with the consumed NPC
+//---------------------------------------------------------------------------------
+function processKill(socket, msg) {
+    logger ("starkill " + msg);
+
+    var cRec = getConnectRecord(socket);
+    var npcRec = getNPCCoords(msg.msg); // the message is the npc id
+
+    if (npcRec != null) {
+
+        if (withinThreshold(npcRec, cRec.pcoords)) {
+
+            console.log ("KILLED NPC " + msg.msg + " within threshold");
+            // TODO add score value to NPC from master, and then add to the player score
+            // here based on that value
+            updateScore(cRec, npcRec.opts.value); // add value of this NPC to score
+            console.log(npcRec);
+            broadcastKill(msg); // notify all clients, kill
+        }
+    }    
+        
+}
+
+//---------------------------------------------------------------------------------
+// withinThreshold
+// this will be moved into the game specific server code as it understnads the
+// coords records, etc.
+//---------------------------------------------------------------------------------
+function withinThreshold(npcRec, pcoords) {
+
+    var xd = Math.abs(npcRec.x - pcoords.x);
+    var yd = Math.abs(npcRec.y - pcoords.y);
+    var thresh = Math.abs(npcRec.xv)/2;   
+    thresh += Math.abs(npcRec.yv)/2;
+    thresh += (Math.abs(pcoords.xv)/2 + Math.abs(pcoords.yv)/2);
+
+    if (xd + yd < thresh) {
+        return true;
+    }
+    return false;
+}    
+
+
+//---------------------------------------------------------------------------------
 // broadcastKill
 //
 // send to all clients the death/removal of an NPC
@@ -272,17 +334,17 @@ function broadcastKill(msg) {
 }
 
 //---------------------------------------------------------------------------------
-// recordScore
+// updateScore
 //
-// record the self-reported score from the client, this of course will be changed
-// to be counted on the server in the future (totally hackable right now)
+// record a score for a player (server generated)
 //---------------------------------------------------------------------------------
-function recordScore(socket, score) {
-    var rec = getConnectRecord(socket);
-    if (exists(rec)) {
-        rec.score = score;
-        logger ("Score registered for " + connectionID(socket) + " : " + score);
-    }
+function updateScore(rec, value) {
+    if (exists(rec) && ('score' in rec)) {
+        rec.score += value;
+    } else {
+        rec.score = value;
+    }    
+    logger ("Score registered for " + rec.userID + " : " + rec.score);
 }
 
 //---------------------------------------------------------------------------------
@@ -325,6 +387,7 @@ function sendPlayerInfo() {
     res['remotePlayers'] = [];
     for (var key in CONNECTS) {
         if ('pcoords' in CONNECTS[key]) {
+            CONNECTS[key]['pcoords']['score'] = CONNECTS[key]['score']; // add score to pcoords record (gets erased on pcoords updates)
             res['remotePlayers'].push(CONNECTS[key]['pcoords']);
         }
     }

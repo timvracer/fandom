@@ -1,11 +1,12 @@
 // helper function - to copy the coffee script existenstial operator
 function exists(a) {return (a!==undefined && a!==null)}
 
-NC = new NetCode({startGame: startGame, 
+NC = new NetCode({startGame: startGame,
+                 NPCkill: NPCkill,
                  setRole: setRole,
                  showRemoteNPCs: showRemoteNPCs,
-                 removeNPC: removeNPC,
                  latencyUpdate: latencyUpdate,
+                 updateScore: updateScore,
                  showRemotePlayers: showRemotePlayers});
 
 
@@ -118,14 +119,19 @@ function showRemotePlayers(coords) {
             rp.x = rec.x;
             rp.y = rec.y;
             rp.frame = rec.frame;
-            rp.body.velocity.x = rec.vx;
-            rp.body.velocity.y = rec.vy;
-            if (rec.vx > 1) {
+            rp.body.velocity.x = rec.xv;
+            rp.body.velocity.y = rec.yv;
+            if (rec.xv > 1) {
                 rp.animations.play('right');
-            } else if (rec.vx < -1) {
+            } else if (rec.xv < -1) {
                 rp.animations.play('left');
             }
-        }    
+        } else {
+            // this ID is our client ID, so just grab the score
+            if ('score' in rec) {
+                updateScore(rec.score);
+            }
+        } 
     }
 }
 
@@ -143,23 +149,27 @@ function showRemoteNPCs(coords) {
 //---------------------------------------------
 // removeNPC
 //---------------------------------------------
-function removeNPC(id) {
+function NPCkill(id) {
 
+    console.log ("REMOVE NPC # " + id);
     GV.stars.forEachAlive(function(star){
-
         if (star.syncID == id) {
-            particleBurst(star.body.position, GV.SEemitter);
-            GV.fx.play("alien death");
+            starCollectEffect(star);
             star.kill();
             maybeRegenerate();
-
-            console.log ("killed star " + star.syncID);
         }   
 
     }, this );
 }
 
+//---------------------------------------------
+// updateScore
+//---------------------------------------------
+function updateScore(newScore) {
 
+        GV.score = newScore;
+        GV.scoreText.text = "Score: " + GV.score + "  ";
+}
 
 //===========================================================================
 // CALLBACKS FOR Phaser Game Module
@@ -279,12 +289,14 @@ function updateServer () {
         GV.stars.forEachAlive(function(star) {
             coords['npcs'].push({id: star.syncID,
                          npcType: 'star',
+                         opts: star.fdOpts,
                          x: star.x, 
                          y: star.y, 
                          xv: star.body.velocity.x, 
                          yv: star.body.velocity.y,
                          xb: star.body.bounce.x,
                          yb: star.body.bounce.y,
+                         rt: star.body.rotation,
                          av: star.body.angularVelocity});
         }, this);
     }   
@@ -292,8 +304,8 @@ function updateServer () {
     coords['player'] = {
             x: GV.player.x,
             y: GV.player.y,
-            vx: GV.player.body.velocity.x,
-            vy: GV.player.body.velocity.y,
+            xv: GV.player.body.velocity.x,
+            yv: GV.player.body.velocity.y,
             id: NC.getUserID(),
             frame: GV.player.frame
         };
@@ -326,16 +338,19 @@ function createButtons() {
 
     button = GAME.add.button(50, GAME.height - 100, 'leftarrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
-    button.onInputOver.add(function() {GV.leftPress = true}, this);
+    button.onInputOver.add(function() {GV.leftPress = true; GV.rightPress = false}, this);
     button.onInputOut.add(function() {GV.leftPress = false}, this);
-    button.onInputUp.add(function() {GV.leftPress = false}, this);
+    //button.onInputDown.add(function() {GV.leftPress = true; GV.rightPress = false}, this);
+    //button.onInputUp.add(function() {GV.leftPress = false}, this);
     button.bringToTop();
     button.scale.x = 1.5;
 
     button = GAME.add.button(320, GAME.height - 100, 'rightarrow', null, this, 0, 0, 1, 0);
     button.fixedToCamera = true;
-    button.onInputOver.add(function() {GV.rightPress = true}, this);
+    button.onInputOver.add(function() {GV.rightPress = true; GV.leftPress = false}, this);
     button.onInputOut.add(function() {GV.rightPress = false}, this);
+    //button.onInputDown.add(function() {GV.leftPress = false; GV.rightPress = true}, this);
+    //button.onInputUp.add(function() {GV.rightPress = false}, this);
     button.bringToTop();
     button.fixedtoCamera = false;
     button.scale.x = 1.5;
@@ -499,6 +514,9 @@ function generateStars(sgrp, amt, coords) {
         //  Create a star inside of the 'stars' group
         var star = sgrp.create(i * spacing, 0, 'star');
 
+        // create the space for game specific options
+        star.fdOpts = {inLimbo: false};
+
         //  Let gravity do its thing
         star.body.gravity.y = GRAVITY;
         star.body.collideWorldBounds = true;
@@ -513,6 +531,16 @@ function generateStars(sgrp, amt, coords) {
             star.body.bounce.x = coords[i].xb;
             star.body.bounce.y = coords[i].yb;
             star.body.angularVelocity = coords[i].av;
+            star.rotation = coords[i].rt;
+            star.fdOpts = coords[i].opts;
+
+            // check for special options for these NPC stars
+            if (getNPCOpt(star, 'dblscore')) {
+                star.scale.x = 1.5;
+                star.scale.y = 1.5;
+                //star.body.scale.x = 1.5;
+                //star.body.scale.y = 1.5;
+            }
             star.syncID = coords[i].id;
 
         } else {
@@ -522,6 +550,17 @@ function generateStars(sgrp, amt, coords) {
             star.body.velocity.x = -400 + (Math.random() * 800);
             star.body.velocity.y = -100 + (Math.random() * 200);
             star.syncID = i;
+            star.fdOpts.value = 10; // these values only used for local mode
+            //
+            // randomly determine special stars
+            //
+            var optRand = (Math.random)() * 100;
+            if (optRand > 80) {
+                star['fdOpts'] = {dblscore: true};
+                star.scale.x = 1.5;
+                star.scale.y = 1.5;
+                star.fdOpts.value = 50;  // used for local mode, otherwise values determined by the server
+            }
         }    
 
         star.body.setSize(star.body.width*.7, star.body.height*.8, star.body.width*.15, star.body.height*.2-2)
@@ -549,23 +588,40 @@ function friction (star, platform) {
 }
 
 //---------------------------------------------
+// getNPCOpts
+//---------------------------------------------
+function getNPCOpt(npc, opt) {
+    if ('fdOpts' in npc && opt in npc.fdOpts) {
+        return npc.fdOpts
+    }
+    return null;
+}
+
+//---------------------------------------------
 // collectStar
 //---------------------------------------------
 function collectStar (player, star) {
     
     // Removes the star from the screen
-    particleBurst(star.body.position, GV.SEemitter);
-    GV.fx.play("alien death");
+    if (star.fdOpts.inLimbo) {
+        return;
+    }
 
-    //  Add and update the score
-    GV.score += 10;
-    GV.scoreText.text = ' Score: ' + GV.score + " ";
-    NC.updateServerScore(GV.score);
+    console.log ("trying to kill star " + star.syncID);
+    starCollectEffect(star);
 
-    console.log ("killing star " + star.syncID);
     NC.netRecordKill(star.syncID);
-    star.kill();
-    maybeRegenerate();
+
+    if (NC.getRole() == 'local') {
+        star.kill();  // Problem, should we kill the sprite here or wait for server message?  Alternatively, we can
+                      // mark star.inLimbo to let it keep moving, but ignore future collisions
+        maybeRegenerate();
+        updateScore(GV.score+star.fdOpts.value);
+    } else {
+        star.fdOpts.inLimbo = true;  // still will exist, but cannot be collected again
+        // TODO: If threshold does not match, then will not get a "kill" message
+        // set a timeout value to turn limbo off since no score is registered
+    }    
 }
 
 //---------------------------------------------
@@ -581,10 +637,26 @@ function maybeRegenerate() {
 }
 
 //---------------------------------------------
+// starCollectEffect
+//---------------------------------------------
+function starCollectEffect(star) {
+    if (getNPCOpt(star, 'dblscore')) {
+        particleBurst(star.body.position, GV.SEemitter, 1.5);
+        GV.fx.play("boss hit");
+    } else {
+        particleBurst(star.body.position, GV.SEemitter);
+        GV.fx.play("alien death");
+    }        
+}
+
+//---------------------------------------------
 // particleBurst
 //---------------------------------------------
-function particleBurst(pointer, emitter) {
+function particleBurst(pointer, emitter, burstFactor) {
 
+    if (!exists(burstFactor)) {
+        burstFactor = 1;
+    }
     //  Position the emitter where the mouse/touch event was
     emitter.x = pointer.x;
     emitter.y = pointer.y;
@@ -596,8 +668,8 @@ function particleBurst(pointer, emitter) {
     //  The third is ignored when using burst/explode mode
     //  The final parameter (10) is how many particles will be emitted in this single burst
     
-    emitter.setAlpha(1, 0, 2000);
-    emitter.start(true, 2000, null, 20);
+    emitter.setAlpha(1, 0, 2000*burstFactor);
+    emitter.start(true, 2000*burstFactor, null, 20*burstFactor);
     emitter.forEach(sizeParticle, this);
 
 }
